@@ -16,6 +16,8 @@ package match
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/dynatrace/dynatrace-configuration-as-code/cmd/monaco/cmdutils"
@@ -40,13 +42,14 @@ type matchLoaderContext struct {
 }
 
 type MatchParameters struct {
-	Name       string
-	Type       string
-	WorkingDir string
-	OutputDir  string
-	SelfMatch  bool
-	Source     MatchParametersEnv
-	Target     MatchParametersEnv
+	Name             string
+	Type             string
+	WorkingDir       string
+	OutputDir        string
+	EntitiesMatchDir string
+	SelfMatch        bool
+	Source           MatchParametersEnv
+	Target           MatchParametersEnv
 }
 
 type MatchParametersEnv struct {
@@ -58,12 +61,13 @@ type MatchParametersEnv struct {
 }
 
 type MatchFileDefinition struct {
-	Name       string            `yaml:"name"`
-	Type       string            `yaml:"type"`
-	OutputPath string            `yaml:"outputPath"`
-	SelfMatch  bool              `yaml:"selfMatch"`
-	Source     EnvInfoDefinition `yaml:"sourceInfo"`
-	Target     EnvInfoDefinition `yaml:"targetInfo"`
+	Name              string            `yaml:"name"`
+	Type              string            `yaml:"type"`
+	EntitiesMatchPath string            `yaml:"entitiesMatchPath,omitempty"`
+	OutputPath        string            `yaml:"outputPath"`
+	SelfMatch         bool              `yaml:"selfMatch"`
+	Source            EnvInfoDefinition `yaml:"sourceInfo"`
+	Target            EnvInfoDefinition `yaml:"targetInfo"`
 }
 
 type EnvInfoDefinition struct {
@@ -174,8 +178,24 @@ func LoadMatchingParameters(fs afero.Fs, matchFileName string) (matchParameters 
 	if err != nil {
 		errors = append(errors, err)
 	} else {
-		matchParameters.OutputDir = ouputDir
-		log.Info("Output Directory: %s", matchParameters.OutputDir)
+
+		sanitizedOutputDir := filepath.Clean(ouputDir)
+		err := os.RemoveAll(sanitizedOutputDir)
+		if err != nil {
+			errors = append(errors, err)
+		} else {
+			matchParameters.OutputDir = sanitizedOutputDir
+			log.Info("Output Directory: %s", matchParameters.OutputDir)
+		}
+
+	}
+
+	_, entitiesMatchDir, err := cmdutils.GetFilePaths(matchFileDef.EntitiesMatchPath)
+	if err != nil {
+		errors = append(errors, err)
+	} else {
+		matchParameters.EntitiesMatchDir = entitiesMatchDir
+		log.Info("Entities Match Directory: %s", matchParameters.EntitiesMatchDir)
 	}
 
 	var errList []error

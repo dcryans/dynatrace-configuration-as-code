@@ -23,7 +23,7 @@ import (
 
 type MatchProcessingEnv struct {
 	RawMatchList          RawMatchList
-	ConfigType            config.EntityType
+	ConfigType            config.Type
 	CurrentRemainingMatch *[]int
 	RemainingMatch        []int
 }

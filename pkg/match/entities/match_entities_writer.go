@@ -94,6 +94,8 @@ func getMultiMatched(remainingResultsPtr *match.IndexCompareResultList, entityPr
 
 }
 
+type MatchOutputPerType map[string]MatchOutputType
+
 type MatchOutputType struct {
 	Type         string              `json:"type"`
 	MatchKey     MatchKey            `json:"matchKey"`
@@ -118,15 +120,15 @@ func genOutputPayload(entityProcessingPtr *match.MatchProcessing, remainingResul
 	entityProcessingPtr.PrepareRemainingMatch(false, true, remainingResultsPtr)
 
 	matchOutput := MatchOutputType{
-		Type: entityProcessingPtr.GetEntitiesType(),
+		Type: entityProcessingPtr.GetType(),
 		MatchKey: MatchKey{
 			Source: ExtractionInfo{
-				From: (*entityProcessingPtr).Source.ConfigType.From,
-				To:   (*entityProcessingPtr).Source.ConfigType.To,
+				From: (*entityProcessingPtr).Source.ConfigType.(config.EntityType).From,
+				To:   (*entityProcessingPtr).Source.ConfigType.(config.EntityType).To,
 			},
 			Target: ExtractionInfo{
-				From: (*entityProcessingPtr).Target.ConfigType.From,
-				To:   (*entityProcessingPtr).Target.ConfigType.To,
+				From: (*entityProcessingPtr).Target.ConfigType.(config.EntityType).From,
+				To:   (*entityProcessingPtr).Target.ConfigType.(config.EntityType).To,
 			},
 		},
 		Matches:      make(map[string]string, len(*matchedEntities)),
@@ -135,8 +137,8 @@ func genOutputPayload(entityProcessingPtr *match.MatchProcessing, remainingResul
 	}
 
 	for sourceI, targetI := range *matchedEntities {
-		matchOutput.Matches[(*entityProcessingPtr.Target.RawMatchList.GetValues())[targetI].(map[string]interface{})["entityId"].(string)] =
-			(*entityProcessingPtr.Source.RawMatchList.GetValues())[sourceI].(map[string]interface{})["entityId"].(string)
+		matchOutput.Matches[(*entityProcessingPtr.Source.RawMatchList.GetValues())[sourceI].(map[string]interface{})["entityId"].(string)] =
+			(*entityProcessingPtr.Target.RawMatchList.GetValues())[targetI].(map[string]interface{})["entityId"].(string)
 	}
 
 	for idx, sourceI := range *entityProcessingPtr.Source.CurrentRemainingMatch {

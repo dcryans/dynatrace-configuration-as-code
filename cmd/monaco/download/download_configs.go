@@ -40,6 +40,7 @@ type downloadCommandOptions struct {
 	specificSchemas []string
 	onlyAPIs        bool
 	onlySettings    bool
+	flatDump        bool
 }
 
 type manifestDownloadOptions struct {
@@ -82,6 +83,7 @@ func (d DefaultCommand) DownloadConfigsBasedOnManifest(fs afero.Fs, cmdOptions m
 		specificSchemas: cmdOptions.specificSchemas,
 		onlyAPIs:        cmdOptions.onlyAPIs,
 		onlySettings:    cmdOptions.onlySettings,
+		flatDump:        cmdOptions.flatDump,
 	}
 
 	dtClient, err := cmdutils.CreateDTClient(env, false)
@@ -119,6 +121,7 @@ func (d DefaultCommand) DownloadConfigs(fs afero.Fs, cmdOptions directDownloadOp
 		specificSchemas: cmdOptions.specificSchemas,
 		onlyAPIs:        cmdOptions.onlyAPIs,
 		onlySettings:    cmdOptions.onlySettings,
+		flatDump:        cmdOptions.flatDump,
 	}
 
 	dtClient, err := client.NewClassicClient(cmdOptions.environmentUrl, token)
@@ -135,6 +138,7 @@ type downloadConfigsOptions struct {
 	specificSchemas []string
 	onlyAPIs        bool
 	onlySettings    bool
+	flatDump        bool
 }
 
 func doDownloadConfigs(fs afero.Fs, c client.Client, apis api.APIs, opts downloadConfigsOptions) error {
@@ -163,8 +167,10 @@ func doDownloadConfigs(fs afero.Fs, c client.Client, apis api.APIs, opts downloa
 		return err
 	}
 
-	log.Info("Resolving dependencies between configurations")
-	downloadedConfigs = download.ResolveDependencies(downloadedConfigs)
+	if !opts.flatDump {
+		log.Info("Resolving dependencies between configurations")
+		downloadedConfigs = download.ResolveDependencies(downloadedConfigs)
+	}
 
 	return writeConfigs(downloadedConfigs, opts.downloadOptionsShared, fs)
 }
@@ -205,7 +211,7 @@ func downloadConfigs(c client.Client, apis api.APIs, opts downloadConfigsOptions
 	configObjects := make(project.ConfigsPerType)
 
 	if shouldDownloadClassicConfigs(opts) {
-		classicCfgs, err := downloadClassicConfigs(c, apis, opts.specificAPIs, opts.projectName)
+		classicCfgs, err := downloadClassicConfigs(c, apis, opts.specificAPIs, opts.projectName, opts.flatDump)
 		if err != nil {
 			return nil, err
 		}
@@ -213,7 +219,7 @@ func downloadConfigs(c client.Client, apis api.APIs, opts downloadConfigsOptions
 	}
 
 	if shouldDownloadSettings(opts) {
-		settingsObjects := downloadSettings(c, opts.specificSchemas, opts.projectName)
+		settingsObjects := downloadSettings(c, opts.specificSchemas, opts.projectName, opts.flatDump)
 		maps.Copy(configObjects, settingsObjects)
 	}
 
@@ -230,36 +236,42 @@ func shouldDownloadSettings(opts downloadConfigsOptions) bool {
 	return !opts.onlyAPIs && (len(opts.specificAPIs) == 0 || len(opts.specificSchemas) > 0)
 }
 
-func downloadClassicConfigs(c client.Client, apis api.APIs, specificAPIs []string, projectName string) (project.ConfigsPerType, error) {
-	apisToDownload := getApisToDownload(apis, specificAPIs)
+func downloadClassicConfigs(c client.Client, apis api.APIs, specificAPIs []string, projectName string, flatDump bool) (project.ConfigsPerType, error) {
+	apisToDownload := getApisToDownload(apis, specificAPIs, flatDump)
 	if len(apisToDownload) == 0 {
 		return nil, fmt.Errorf("no APIs to download")
 	}
 
 	if len(specificAPIs) > 0 {
 		log.Debug("APIs to download: \n - %v", strings.Join(maps.Keys(apisToDownload), "\n - "))
-		cfgs := classic.DownloadAllConfigs(apisToDownload, c, projectName)
+		cfgs := classic.DownloadAllConfigs(apisToDownload, c, projectName, flatDump)
 		return cfgs, nil
 	}
 
 	log.Debug("APIs to download: \n - %v", strings.Join(maps.Keys(apisToDownload), "\n - "))
-	cfgs := classic.DownloadAllConfigs(apisToDownload, c, projectName)
+	cfgs := classic.DownloadAllConfigs(apisToDownload, c, projectName, flatDump)
 	return cfgs, nil
 }
 
-func downloadSettings(c client.Client, specificSchemas []string, projectName string) project.ConfigsPerType {
+func downloadSettings(c client.Client, specificSchemas []string, projectName string, flatDump bool) project.ConfigsPerType {
 	if len(specificSchemas) > 0 {
 		log.Debug("Settings to download: \n - %v", strings.Join(specificSchemas, "\n - "))
-		s := settings.Download(c, specificSchemas, projectName)
+		s := settings.Download(c, specificSchemas, projectName, flatDump)
 		return s
 	}
 
-	s := settings.DownloadAll(c, projectName)
+	s := settings.DownloadAll(c, projectName, flatDump)
 	return s
 }
 
 // Get all v2 apis and filter for the selected ones
-func getApisToDownload(apis api.APIs, specificAPIs []string) api.APIs {
+func getApisToDownload(apis api.APIs, specificAPIs []string, flatDump bool) api.APIs {
+	if flatDump {
+		mzApi := apis["management-zone"]
+		mzApi.DeprecatedBy = ""
+		apis["management-zone"] = mzApi
+	}
+
 	if len(specificAPIs) > 0 {
 		return apis.Filter(api.RetainByName(specificAPIs), skipDownloadFilter)
 	} else {

@@ -862,6 +862,7 @@ func TestDownloadIntegrationDownloadsAPIsAndSettings(t *testing.T) {
 
 	opts := setupTestingDownloadOptions(t, server, projectName)
 	opts.onlySettings = false
+	opts.flatDump = false
 	opts.onlyAPIs = false
 
 	dtClient, _ := client.NewDynatraceClientForTesting(server.URL, server.Client())
@@ -923,6 +924,7 @@ func TestDownloadIntegrationDownloadsOnlyAPIsIfConfigured(t *testing.T) {
 
 	opts := setupTestingDownloadOptions(t, server, projectName)
 	opts.onlySettings = false
+	opts.flatDump = false
 	opts.onlyAPIs = true
 	dtClient, _ := client.NewDynatraceClientForTesting(server.URL, server.Client())
 
@@ -980,6 +982,7 @@ func TestDownloadIntegrationDownloadsOnlySettingsIfConfigured(t *testing.T) {
 
 	opts := setupTestingDownloadOptions(t, server, projectName)
 	opts.onlySettings = true
+	opts.flatDump = false
 	opts.onlyAPIs = false
 	dtClient, _ := client.NewDynatraceClientForTesting(server.URL, server.Client())
 

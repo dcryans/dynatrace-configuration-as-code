@@ -259,8 +259,13 @@ func (c *DummyClient) ListSchemas() (SchemaList, error) {
 func (c *DummyClient) GetSettingById(_ string) (*DownloadSettingsObject, error) {
 	return &DownloadSettingsObject{}, nil
 }
+
 func (c *DummyClient) ListSettings(_ string, _ ListSettingsOptions) ([]DownloadSettingsObject, error) {
 	return make([]DownloadSettingsObject, 0), nil
+}
+
+func (c *DummyClient) ListSettingsFlat(_ string, _ ListSettingsOptions) ([]string, error) {
+	return make([]string, 0), nil
 }
 
 func (l *DummyClient) DeleteSettings(_ string) error {

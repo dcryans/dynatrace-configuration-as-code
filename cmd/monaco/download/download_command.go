@@ -17,13 +17,14 @@ package download
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"os"
+
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/featureflags"
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/log"
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/version"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/client"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/manifest"
-	"net/http"
-	"os"
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
@@ -64,6 +65,7 @@ func getDownloadConfigsCommand(fs afero.Fs, command Command, downloadCmd *cobra.
 	var specificSettings []string
 	var onlyAPIs bool
 	var onlySettings bool
+	var flatDump bool
 
 	manifestDownloadCmd := &cobra.Command{
 		Use:     "manifest [manifest file] [environment to download]",
@@ -93,6 +95,7 @@ func getDownloadConfigsCommand(fs afero.Fs, command Command, downloadCmd *cobra.
 					specificSchemas: specificSettings,
 					onlyAPIs:        onlyAPIs,
 					onlySettings:    onlySettings,
+					flatDump:        flatDump,
 				},
 			}
 
@@ -116,9 +119,7 @@ func getDownloadConfigsCommand(fs afero.Fs, command Command, downloadCmd *cobra.
 			serverVersion, err := client.GetDynatraceVersion(client.NewTokenAuthClient(os.Getenv(args[1])), args[0])
 			if err != nil {
 				log.Error("Unable to determine server version %q: %w", args[0], err)
-				return
-			}
-			if serverVersion.SmallerThan(version.Version{Major: 1, Minor: 262}) {
+			} else if serverVersion.SmallerThan(version.Version{Major: 1, Minor: 262}) {
 				logUploadToSameEnvironmentWarning()
 			}
 		},
@@ -138,6 +139,7 @@ func getDownloadConfigsCommand(fs afero.Fs, command Command, downloadCmd *cobra.
 					specificSchemas: specificSettings,
 					onlyAPIs:        onlyAPIs,
 					onlySettings:    onlySettings,
+					flatDump:        flatDump,
 				},
 			}
 			return command.DownloadConfigs(fs, options)
@@ -145,8 +147,8 @@ func getDownloadConfigsCommand(fs afero.Fs, command Command, downloadCmd *cobra.
 		},
 	}
 
-	setupSharedConfigsFlags(manifestDownloadCmd, &project, &outputFolder, &forceOverwrite, &specificApis, &specificSettings, &onlyAPIs, &onlySettings)
-	setupSharedConfigsFlags(directDownloadCmd, &project, &outputFolder, &forceOverwrite, &specificApis, &specificSettings, &onlyAPIs, &onlySettings)
+	setupSharedConfigsFlags(manifestDownloadCmd, &project, &outputFolder, &forceOverwrite, &specificApis, &specificSettings, &onlyAPIs, &onlySettings, &flatDump)
+	setupSharedConfigsFlags(directDownloadCmd, &project, &outputFolder, &forceOverwrite, &specificApis, &specificSettings, &onlyAPIs, &onlySettings, &flatDump)
 
 	downloadCmd.AddCommand(manifestDownloadCmd)
 	downloadCmd.AddCommand(directDownloadCmd)
@@ -242,13 +244,14 @@ Either downloading based on an existing manifest, or by defining environment URL
 	downloadCmd.AddCommand(downloadEntitiesCmd)
 }
 
-func setupSharedConfigsFlags(cmd *cobra.Command, project, outputFolder *string, forceOverwrite *bool, specificApis *[]string, specificSettings *[]string, onlyAPIs, onlySettings *bool) {
+func setupSharedConfigsFlags(cmd *cobra.Command, project, outputFolder *string, forceOverwrite *bool, specificApis *[]string, specificSettings *[]string, onlyAPIs, onlySettings *bool, flatDump *bool) {
 	setupSharedFlags(cmd, project, outputFolder, forceOverwrite)
 	// flags always available
 	cmd.Flags().StringSliceVarP(specificApis, "api", "a", make([]string, 0), "One or more APIs to download (flag can be repeated or value defined as comma-separated list)")
 	cmd.Flags().StringSliceVarP(specificSettings, "settings-schema", "s", make([]string, 0), "One or more settings 2.0 schemas to download (flag can be repeated or value defined as comma-separated list)")
 	cmd.Flags().BoolVar(onlyAPIs, "only-apis", false, "Only download config APIs, skip downloading settings 2.0 objects")
 	cmd.Flags().BoolVar(onlySettings, "only-settings", false, "Only download settings 2.0 objects, skip downloading config APIs")
+	cmd.Flags().BoolVar(flatDump, "flat-dump", false, "Dump results in a big unformatted json array for processing/cache purposes")
 	cmd.MarkFlagsMutuallyExclusive("settings-schema", "only-apis")
 	cmd.MarkFlagsMutuallyExclusive("api", "only-settings")
 	cmd.MarkFlagsMutuallyExclusive("only-apis", "only-settings")
@@ -298,9 +301,7 @@ func printUploadToSameEnvironmentWarning(env manifest.EnvironmentDefinition) {
 	serverVersion, err = client.GetDynatraceVersion(httpClient, env.URL.Value)
 	if err != nil {
 		log.Warn("Unable to determine server version %q: %w", env.URL.Value, err)
-		return
-	}
-	if serverVersion.SmallerThan(version.Version{Major: 1, Minor: 262}) {
+	} else if serverVersion.SmallerThan(version.Version{Major: 1, Minor: 262}) {
 		logUploadToSameEnvironmentWarning()
 	}
 }

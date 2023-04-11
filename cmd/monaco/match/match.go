@@ -21,8 +21,10 @@ import (
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/errutils"
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/log"
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/maps"
+	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/api"
 	config "github.com/dynatrace/dynatrace-configuration-as-code/pkg/config/v2"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/match"
+	matchConfigs "github.com/dynatrace/dynatrace-configuration-as-code/pkg/match/configs"
 	matchEntities "github.com/dynatrace/dynatrace-configuration-as-code/pkg/match/entities"
 	project "github.com/dynatrace/dynatrace-configuration-as-code/pkg/project/v2"
 	"github.com/spf13/afero"
@@ -61,6 +63,27 @@ func (d DefaultCommand) Match(fs afero.Fs, matchFileName string) error {
 		return err
 	}
 
+	if matchParameters.Type == "entities" {
+
+		err = runAndPrintMatchEntities(fs, matchParameters, configsSource, configsTarget, startTime)
+		if err != nil {
+			return err
+		}
+
+	} else if matchParameters.Type == "configs" {
+
+		err = runAndPrintMatchConfigs(fs, matchParameters, configsSource, configsTarget, startTime)
+		if err != nil {
+			return err
+		}
+
+	}
+
+	return nil
+}
+
+func runAndPrintMatchEntities(fs afero.Fs, matchParameters match.MatchParameters, configsSource project.ConfigsPerType, configsTarget project.ConfigsPerType, startTime time.Time) error {
+
 	stats, entitiesSourceCount, entitiesTargetCount, err := matchEntities.MatchEntities(fs, matchParameters, configsSource, configsTarget)
 	if err != nil {
 		return err
@@ -73,6 +96,24 @@ func (d DefaultCommand) Match(fs afero.Fs, matchFileName string) error {
 	p := message.NewPrinter(language.English)
 	log.Info("Finished matching %d entity types, %s source entities and %s target entities in %v",
 		len(configsSource), p.Sprintf("%d", entitiesSourceCount), p.Sprintf("%d", entitiesTargetCount), time.Since(startTime))
+
+	return nil
+}
+
+func runAndPrintMatchConfigs(fs afero.Fs, matchParameters match.MatchParameters, configsSource project.ConfigsPerType, configsTarget project.ConfigsPerType, startTime time.Time) error {
+
+	stats, configsSourceCount, configsTargetCount, err := matchConfigs.MatchConfigs(fs, matchParameters, configsSource, configsTarget)
+	if err != nil {
+		return err
+	}
+
+	for _, stat := range stats {
+		log.Info(stat)
+	}
+
+	p := message.NewPrinter(language.English)
+	log.Info("Finished matching %d config schemas, %s source configs and %s target configs in %v",
+		len(configsSource), p.Sprintf("%d", configsSourceCount), p.Sprintf("%d", configsTargetCount), time.Since(startTime))
 
 	return nil
 }
@@ -98,7 +139,7 @@ func loadProject(fs afero.Fs, env match.MatchParametersEnv) (project.ConfigsPerT
 	log.Info("Loading project %s of %s environment %s ...", env.Project, env.EnvType, env.Environment)
 
 	context := project.ProjectLoaderContext{
-		KnownApis:       nil,
+		KnownApis:       api.NewAPIs().GetApiNameLookup(),
 		WorkingDir:      env.WorkingDir,
 		Manifest:        env.Manifest,
 		ParametersSerde: config.DefaultParameterParsers,
@@ -125,7 +166,7 @@ func loadProject(fs afero.Fs, env match.MatchParametersEnv) (project.ConfigsPerT
 
 	envConfigs := project.Configs[env.Environment]
 
-	log.Info("Loaded %d entity types for %s environment %s, entity types: %v",
+	log.Info("Loaded %d config types for %s environment %s, config types: %v",
 		len(maps.Keys(envConfigs)), env.EnvType, env.Environment, maps.Keys(envConfigs))
 
 	return envConfigs, nil

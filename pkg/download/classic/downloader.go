@@ -18,22 +18,30 @@ package classic
 
 import (
 	"encoding/json"
-	"github.com/dynatrace/dynatrace-configuration-as-code/internal/log"
 	"sync"
 	"time"
+
+	"github.com/dynatrace/dynatrace-configuration-as-code/internal/idutils"
+	"github.com/dynatrace/dynatrace-configuration-as-code/internal/log"
 
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/api"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/client"
 	config "github.com/dynatrace/dynatrace-configuration-as-code/pkg/config/v2"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/config/v2/coordinate"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/config/v2/parameter"
+	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/config/v2/parameter/value"
 	valueParam "github.com/dynatrace/dynatrace-configuration-as-code/pkg/config/v2/parameter/value"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/config/v2/template"
+	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/download/entities"
 	project "github.com/dynatrace/dynatrace-configuration-as-code/pkg/project/v2"
 )
 
-func DownloadAllConfigs(apisToDownload api.APIs, client client.Client, projectName string) project.ConfigsPerType {
-	return NewDownloader(client).DownloadAll(apisToDownload, projectName)
+const ClassicIdKey = "classicId"
+const URLPathKey = "URLPath"
+const valueKey = "value"
+
+func DownloadAllConfigs(apisToDownload api.APIs, client client.Client, projectName string, flatDump bool) project.ConfigsPerType {
+	return NewDownloader(client).DownloadAll(apisToDownload, projectName, flatDump)
 }
 
 // Downloader is responsible for downloading classic Dynatrace APIs
@@ -69,7 +77,7 @@ func NewDownloader(client client.Client, opts ...func(*Downloader)) *Downloader 
 // DownloadAllConfigs downloads all specified APIs from a given environment.
 //
 // See package documentation for implementation details.
-func (d *Downloader) DownloadAll(apisToDownload api.APIs, projectName string) project.ConfigsPerType {
+func (d *Downloader) DownloadAll(apisToDownload api.APIs, projectName string, flatDump bool) project.ConfigsPerType {
 	results := make(project.ConfigsPerType, len(apisToDownload))
 	mutex := sync.Mutex{}
 	wg := sync.WaitGroup{}
@@ -95,7 +103,12 @@ func (d *Downloader) DownloadAll(apisToDownload api.APIs, projectName string) pr
 			}
 
 			log.Debug("\tFound %d configs of type '%v' to download", len(configsToDownload), currentApi.ID)
-			configs := d.downloadConfigsOfAPI(currentApi, configsToDownload, projectName)
+			var configs []config.Config
+			if flatDump {
+				configs = d.downloadConfigsOfAPIFlat(currentApi, configsToDownload, projectName)
+			} else {
+				configs = d.downloadConfigsOfAPI(currentApi, configsToDownload, projectName)
+			}
 
 			log.Debug("\tFinished downloading all configs of type '%v'", currentApi.ID)
 			if len(configs) > 0 {
@@ -152,6 +165,36 @@ func (d *Downloader) downloadConfigsOfAPI(api api.API, values []client.Value, pr
 	return results
 }
 
+func (d *Downloader) downloadConfigsOfAPIFlat(api api.API, values []client.Value, projectName string) []config.Config {
+	resultsString := make([]string, 0, len(values))
+	mutex := sync.Mutex{}
+	wg := sync.WaitGroup{}
+	wg.Add(len(values))
+
+	for _, value := range values {
+		value := value
+		go func() {
+			defer wg.Done()
+			log.Info("Downloading API: %s, Key: %s", api.ID, value.Id)
+			downloadedJsonString, err := d.downloadConfigFlat(api, value)
+			if err != nil {
+				log.Error("Error fetching config '%v' in api '%v': %v", value.Id, api.ID, err)
+				return
+			}
+
+			mutex.Lock()
+			resultsString = append(resultsString, downloadedJsonString)
+			mutex.Unlock()
+
+		}()
+	}
+	wg.Wait()
+
+	results := d.convertAllObjectsFlat(resultsString, api, projectName)
+
+	return results
+}
+
 func (d *Downloader) downloadAndUnmarshalConfig(theApi api.API, value client.Value) (map[string]interface{}, error) {
 	response, err := d.client.ReadConfigById(theApi, value.Id)
 
@@ -166,6 +209,54 @@ func (d *Downloader) downloadAndUnmarshalConfig(theApi api.API, value client.Val
 	}
 
 	return data, nil
+}
+
+func (d *Downloader) downloadConfigFlat(theApi api.API, value client.Value) (string, error) {
+	data, err := d.downloadAndUnmarshalConfig(theApi, value)
+	if err != nil {
+		return "", err
+	}
+
+	toSaveDownloaded := make(map[string]interface{}, 3)
+	toSaveDownloaded[ClassicIdKey] = value.Id
+	toSaveDownloaded[URLPathKey] = theApi.URLPath
+	toSaveDownloaded[valueKey] = data
+
+	toSaveData := make(map[string]interface{}, 1)
+	toSaveData[client.DownloadedKey] = toSaveDownloaded
+
+	rawJson, err := json.Marshal(toSaveData)
+	if err != nil {
+		return "", err
+	}
+
+	return string(rawJson), nil
+}
+
+func (d *Downloader) convertAllObjectsFlat(objects []string, theApi api.API, projectName string) []config.Config {
+
+	content := entities.JoinJsonElementsToArray(objects)
+
+	templ := template.NewDownloadTemplate(theApi.ID, theApi.ID, content)
+
+	configId := idutils.GenerateUuidFromName(theApi.ID)
+
+	return []config.Config{{
+		Template: templ,
+		Coordinate: coordinate.Coordinate{
+			Project:  projectName,
+			Type:     theApi.ID,
+			ConfigId: configId,
+		},
+		Type: config.ClassicApiType{
+			Api: theApi.ID,
+		},
+		Parameters: map[string]parameter.Parameter{
+			config.NameParameter: &value.ValueParameter{Value: configId},
+		},
+		Skip: false,
+	}}
+
 }
 
 func (d *Downloader) createConfigForDownloadedJson(mappedJson map[string]interface{}, theApi api.API, value client.Value, projectId string) (config.Config, error) {

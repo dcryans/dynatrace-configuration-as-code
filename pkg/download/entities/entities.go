@@ -161,7 +161,7 @@ func (d *Downloader) download(entitiesTypes []client.EntitiesType, projectName s
 
 func (d *Downloader) convertObject(entitiesList client.EntitiesList, entitiesType string, projectName string) []config.Config {
 
-	content := joinJsonElementsToArray(entitiesList.Entities)
+	content := JoinJsonElementsToArray(entitiesList.Entities)
 
 	templ := template.NewDownloadTemplate(entitiesType, entitiesType, content)
 
@@ -187,7 +187,7 @@ func (d *Downloader) convertObject(entitiesList client.EntitiesList, entitiesTyp
 
 }
 
-func joinJsonElementsToArray(elems []string) string {
+func JoinJsonElementsToArray(elems []string) string {
 
 	sep := ","
 	startString := "["

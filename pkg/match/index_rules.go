@@ -103,7 +103,7 @@ func (i *IndexRuleMapGenerator) RunIndexRuleAll(matchProcessingPtr *MatchProcess
 
 	ruleTypes := i.genSortedActiveList()
 
-	log.Info("Type: %s -> source count %d and target count %d", matchProcessingPtr.GetEntitiesType(),
+	log.Info("Type: %s -> source count %d and target count %d", matchProcessingPtr.GetType(),
 		matchProcessingPtr.Source.RawMatchList.Len(), matchProcessingPtr.Target.RawMatchList.Len())
 
 	for _, indexRuleType := range ruleTypes {
@@ -124,7 +124,7 @@ func (i *IndexRuleMapGenerator) RunIndexRuleAll(matchProcessingPtr *MatchProcess
 	}
 
 	log.Info("Type: %s -> source count %d and target count %d -> Matched: %d",
-		matchProcessingPtr.GetEntitiesType(), len(*matchProcessingPtr.Source.RawMatchList.GetValues()),
+		matchProcessingPtr.GetType(), len(*matchProcessingPtr.Source.RawMatchList.GetValues()),
 		len(*matchProcessingPtr.Target.RawMatchList.GetValues()), len(matchedEntities))
 
 	return remainingResultsPtr, &matchedEntities

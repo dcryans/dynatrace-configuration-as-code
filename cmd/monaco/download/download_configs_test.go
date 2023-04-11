@@ -105,6 +105,7 @@ func TestDownloadConfigsBehaviour(t *testing.T) {
 				specificSchemas: nil,
 				onlyAPIs:        false,
 				onlySettings:    false,
+				flatDump:        false,
 			},
 			expectedBehaviour: func(c *client.MockClient) {
 				c.EXPECT().ListConfigs(gomock.Any()).AnyTimes().Return([]client.Value{}, nil)
@@ -120,6 +121,7 @@ func TestDownloadConfigsBehaviour(t *testing.T) {
 				specificSchemas: []string{"builtin:magic.secret"},
 				onlyAPIs:        false,
 				onlySettings:    false,
+				flatDump:        false,
 			},
 			expectedBehaviour: func(c *client.MockClient) {
 				c.EXPECT().ListConfigs(gomock.Any()).Times(0)
@@ -134,6 +136,7 @@ func TestDownloadConfigsBehaviour(t *testing.T) {
 				specificSchemas: nil,
 				onlyAPIs:        false,
 				onlySettings:    false,
+				flatDump:        false,
 			},
 			expectedBehaviour: func(c *client.MockClient) {
 				c.EXPECT().ListConfigs(api.NewAPIs()["alerting-profile"]).Return([]client.Value{{Id: "42", Name: "profile"}}, nil)
@@ -149,6 +152,7 @@ func TestDownloadConfigsBehaviour(t *testing.T) {
 				specificSchemas: []string{"builtin:magic.secret"},
 				onlyAPIs:        false,
 				onlySettings:    false,
+				flatDump:        false,
 			},
 			expectedBehaviour: func(c *client.MockClient) {
 				c.EXPECT().ListConfigs(api.NewAPIs()["alerting-profile"]).Return([]client.Value{{Id: "42", Name: "profile"}}, nil)
@@ -164,6 +168,7 @@ func TestDownloadConfigsBehaviour(t *testing.T) {
 				specificSchemas: nil,
 				onlyAPIs:        true,
 				onlySettings:    false,
+				flatDump:        false,
 			},
 			expectedBehaviour: func(c *client.MockClient) {
 				c.EXPECT().ListConfigs(gomock.Any()).AnyTimes().Return([]client.Value{}, nil)
@@ -179,6 +184,7 @@ func TestDownloadConfigsBehaviour(t *testing.T) {
 				specificSchemas: nil,
 				onlyAPIs:        false,
 				onlySettings:    true,
+				flatDump:        false,
 			},
 			expectedBehaviour: func(c *client.MockClient) {
 				c.EXPECT().ListConfigs(gomock.Any()).Times(0)
@@ -228,6 +234,7 @@ func Test_shouldDownloadAPIs(t *testing.T) {
 				specificSchemas:       nil,
 				onlyAPIs:              false,
 				onlySettings:          false,
+				flatDump:              false,
 			},
 			want: true,
 		},
@@ -239,6 +246,7 @@ func Test_shouldDownloadAPIs(t *testing.T) {
 				specificSchemas:       nil,
 				onlyAPIs:              true,
 				onlySettings:          false,
+				flatDump:              false,
 			},
 			want: true,
 		},
@@ -250,6 +258,7 @@ func Test_shouldDownloadAPIs(t *testing.T) {
 				specificSchemas:       nil,
 				onlyAPIs:              false,
 				onlySettings:          false,
+				flatDump:              false,
 			},
 			want: true,
 		},
@@ -261,6 +270,7 @@ func Test_shouldDownloadAPIs(t *testing.T) {
 				specificSchemas:       []string{"some-schema", "other-schema"},
 				onlyAPIs:              false,
 				onlySettings:          false,
+				flatDump:              false,
 			},
 			want: false,
 		},
@@ -272,6 +282,7 @@ func Test_shouldDownloadAPIs(t *testing.T) {
 				specificSchemas:       []string{"some-schema", "other-schema"},
 				onlyAPIs:              false,
 				onlySettings:          false,
+				flatDump:              false,
 			},
 			want: true,
 		},
@@ -283,6 +294,7 @@ func Test_shouldDownloadAPIs(t *testing.T) {
 				specificSchemas:       []string{"some-schema", "other-schema"},
 				onlyAPIs:              false,
 				onlySettings:          true,
+				flatDump:              false,
 			},
 			want: false,
 		},
@@ -308,6 +320,7 @@ func Test_shouldDownloadSettings(t *testing.T) {
 				specificSchemas:       nil,
 				onlyAPIs:              false,
 				onlySettings:          false,
+				flatDump:              false,
 			},
 			want: true,
 		},
@@ -319,6 +332,7 @@ func Test_shouldDownloadSettings(t *testing.T) {
 				specificSchemas:       nil,
 				onlyAPIs:              false,
 				onlySettings:          true,
+				flatDump:              false,
 			},
 			want: true,
 		},
@@ -330,6 +344,7 @@ func Test_shouldDownloadSettings(t *testing.T) {
 				specificSchemas:       []string{"some-schema", "other-schema"},
 				onlyAPIs:              false,
 				onlySettings:          false,
+				flatDump:              false,
 			},
 			want: true,
 		},
@@ -341,6 +356,7 @@ func Test_shouldDownloadSettings(t *testing.T) {
 				specificSchemas:       nil,
 				onlyAPIs:              false,
 				onlySettings:          false,
+				flatDump:              false,
 			},
 			want: false,
 		},
@@ -352,6 +368,7 @@ func Test_shouldDownloadSettings(t *testing.T) {
 				specificSchemas:       []string{"some-schema", "other-schema"},
 				onlyAPIs:              false,
 				onlySettings:          false,
+				flatDump:              false,
 			},
 			want: true,
 		},
@@ -363,6 +380,7 @@ func Test_shouldDownloadSettings(t *testing.T) {
 				specificSchemas:       nil,
 				onlyAPIs:              true,
 				onlySettings:          false,
+				flatDump:              false,
 			},
 			want: false,
 		},
@@ -478,6 +496,7 @@ func TestDownloadConfigsExitsEarlyForUnknownAPI(t *testing.T) {
 		specificSchemas: nil,
 		onlyAPIs:        false,
 		onlySettings:    false,
+		flatDump:        false,
 		downloadOptionsShared: downloadOptionsShared{
 			environmentUrl: "testurl.com",
 			auth: manifest.Auth{
@@ -506,6 +525,7 @@ func TestDownloadConfigsExitsEarlyForUnknownSettingsSchema(t *testing.T) {
 		specificSchemas: []string{"UNKOWN SCHEMA"},
 		onlyAPIs:        false,
 		onlySettings:    false,
+		flatDump:        false,
 		downloadOptionsShared: downloadOptionsShared{
 			environmentUrl: "testurl.com",
 			auth: manifest.Auth{

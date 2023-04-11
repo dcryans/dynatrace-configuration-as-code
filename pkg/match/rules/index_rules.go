@@ -29,6 +29,7 @@ type IndexRule struct {
 	Path              []string
 	WeightValue       int
 	SelfMatchDisabled bool
+	SpecificType      []string
 }
 
 func GenExtraFieldsL2(ruleList []IndexRuleType) map[string][]string {

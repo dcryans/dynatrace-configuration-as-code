@@ -46,12 +46,12 @@ func NewMatchProcessing(rawMatchListSource RawMatchList, SourceType config.Type,
 
 	e.Source = MatchProcessingEnv{
 		RawMatchList:   rawMatchListSource,
-		ConfigType:     SourceType.(config.EntityType),
+		ConfigType:     SourceType,
 		RemainingMatch: genRemainingMatchList(rawMatchListSource),
 	}
 	e.Target = MatchProcessingEnv{
 		RawMatchList:   rawMatchListTarget,
-		ConfigType:     TargetType.(config.EntityType),
+		ConfigType:     TargetType,
 		RemainingMatch: genRemainingMatchList(rawMatchListTarget),
 	}
 
@@ -67,13 +67,32 @@ func genRemainingMatchList(rawMatchList RawMatchList) []int {
 	return remainingMatchList
 }
 
-func (e *MatchProcessing) GetEntitiesType() string {
+func (e *MatchProcessing) GetType() string {
 
-	if (e.Target.ConfigType == config.EntityType{}) {
-		return e.Source.ConfigType.EntitiesType
+	var conf config.Type
+
+	if e.Target.ConfigType == nil {
+		conf = e.Source.ConfigType
+	} else {
+		conf = e.Target.ConfigType
 	}
-	return e.Target.ConfigType.EntitiesType
 
+	entityType, ok := conf.(config.EntityType)
+	if ok {
+		return entityType.EntitiesType
+	}
+
+	settingsType, ok := conf.(config.SettingsType)
+	if ok {
+		return settingsType.SchemaId
+	}
+
+	classicType, ok := conf.(config.ClassicApiType)
+	if ok {
+		return classicType.Api
+	}
+
+	return ""
 }
 
 func (e *MatchProcessing) adjustremainingMatch(uniqueMatch *[]CompareResult) {

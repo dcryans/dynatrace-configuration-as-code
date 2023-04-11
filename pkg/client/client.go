@@ -91,6 +91,12 @@ type DownloadSettingsObject struct {
 	Value         json.RawMessage `json:"value"`
 }
 
+const DownloadedKey = "downloaded"
+
+type SettingsResponseRaw struct {
+	Settings []map[string]interface{} `json:"items"`
+}
+
 // ErrSettingNotFound is returned when no settings 2.0 object could be found
 var ErrSettingNotFound = errors.New("settings object not found")
 
@@ -116,6 +122,9 @@ type SettingsClient interface {
 
 	// ListSettings returns all settings objects for a given schema.
 	ListSettings(string, ListSettingsOptions) ([]DownloadSettingsObject, error)
+
+	// ListSettings returns all settings objects for a given schema in a flat unformatted file.
+	ListSettingsFlat(string, ListSettingsOptions) ([]string, error)
 
 	// GetSettingById returns the setting with the given object ID
 	GetSettingById(string) (*DownloadSettingsObject, error)
@@ -598,6 +607,82 @@ func (d *DynatraceClient) GetSettingById(objectId string) (*DownloadSettingsObje
 func (d *DynatraceClient) ListSettings(schemaId string, opts ListSettingsOptions) ([]DownloadSettingsObject, error) {
 	log.Debug("Downloading all settings for schema %s", schemaId)
 
+	resultSettings := make([]DownloadSettingsObject, 0)
+
+	addToResultSettings := func(body []byte) (int, int, error) {
+		var parsed struct {
+			Items []DownloadSettingsObject `json:"items"`
+		}
+		if err := json.Unmarshal(body, &parsed); err != nil {
+			return 0, len(resultSettings), fmt.Errorf("failed to unmarshal response: %w", err)
+		}
+
+		// eventually apply filter
+		if opts.Filter == nil {
+			resultSettings = append(resultSettings, parsed.Items...)
+		} else {
+			for _, i := range parsed.Items {
+				if opts.Filter(i) {
+					resultSettings = append(resultSettings, i)
+				}
+			}
+		}
+
+		return len(parsed.Items), len(resultSettings), nil
+	}
+
+	params := genSettingsParams(opts, schemaId)
+	_, err := d.listPaginated(d.settingsObjectAPIPath, params, schemaId, addToResultSettings)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return resultSettings, nil
+}
+
+func (d *DynatraceClient) ListSettingsFlat(schemaId string, opts ListSettingsOptions) ([]string, error) {
+	log.Debug("Downloading all settings -flat-dump- for schema %s", schemaId)
+
+	resultStrings := make([]string, 0)
+
+	addToResultStrings := func(body []byte) (int, int, error) {
+		var parsedRaw SettingsResponseRaw
+
+		if err1 := json.Unmarshal(body, &parsedRaw); err1 != nil {
+			return 0, len(resultStrings), fmt.Errorf("failed to unmarshal response: %w", err1)
+		}
+
+		contentList := make([]string, len(parsedRaw.Settings))
+
+		for idx, settingMap := range parsedRaw.Settings {
+			toSaveData := make(map[string]interface{}, 2)
+			toSaveData[DownloadedKey] = settingMap
+
+			rawJson, err := json.Marshal(toSaveData)
+			if err != nil {
+				return 0, len(resultStrings), err
+			}
+
+			contentList[idx] = string(rawJson)
+		}
+
+		resultStrings = append(resultStrings, contentList...)
+
+		return len(parsedRaw.Settings), len(resultStrings), nil
+	}
+
+	params := genSettingsParams(opts, schemaId)
+	_, err := d.listPaginated(d.settingsObjectAPIPath, params, schemaId, addToResultStrings)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return resultStrings, nil
+}
+
+func genSettingsParams(opts ListSettingsOptions, schemaId string) url.Values {
 	listSettingsFields := defaultListSettingsFields
 	if opts.DiscardValue {
 		listSettingsFields = reducedListSettingsFields
@@ -607,38 +692,7 @@ func (d *DynatraceClient) ListSettings(schemaId string, opts ListSettingsOptions
 		"pageSize":  []string{defaultPageSize},
 		"fields":    []string{listSettingsFields},
 	}
-
-	result := make([]DownloadSettingsObject, 0)
-
-	addToResult := func(body []byte) (int, int, error) {
-		var parsed struct {
-			Items []DownloadSettingsObject `json:"items"`
-		}
-		if err := json.Unmarshal(body, &parsed); err != nil {
-			return 0, len(result), fmt.Errorf("failed to unmarshal response: %w", err)
-		}
-
-		// eventually apply filter
-		if opts.Filter == nil {
-			result = append(result, parsed.Items...)
-		} else {
-			for _, i := range parsed.Items {
-				if opts.Filter(i) {
-					result = append(result, i)
-				}
-			}
-		}
-
-		return len(parsed.Items), len(result), nil
-	}
-
-	_, err := d.listPaginated(d.settingsObjectAPIPath, params, schemaId, addToResult)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
+	return params
 }
 
 type EntitiesTypeListResponse struct {

@@ -110,7 +110,7 @@ func TestGenRemainingMatchList(t *testing.T) {
 	}
 }
 
-func TestGetEntitiesType(t *testing.T) {
+func TestGetType(t *testing.T) {
 
 	tests := []struct {
 		name            string
@@ -118,7 +118,7 @@ func TestGetEntitiesType(t *testing.T) {
 		want            string
 	}{
 		{
-			name: "GetEntitiesType - Both",
+			name: "GetType - Both",
 			matchProcessing: MatchProcessing{
 				Source: MatchProcessingEnv{
 					RawMatchList: getRawMatchListFromJson(entityListJsonSorted),
@@ -143,7 +143,7 @@ func TestGetEntitiesType(t *testing.T) {
 			want: "HOST",
 		},
 		{
-			name: "GetEntitiesType - Target Only",
+			name: "GetType - Target Only",
 			matchProcessing: MatchProcessing{
 				Source: MatchProcessingEnv{},
 				Target: MatchProcessingEnv{
@@ -160,7 +160,7 @@ func TestGetEntitiesType(t *testing.T) {
 			want: "HOST",
 		},
 		{
-			name: "GetEntitiesType - Source Only",
+			name: "GetType - Source Only",
 			matchProcessing: MatchProcessing{
 				Source: MatchProcessingEnv{
 					RawMatchList: getRawMatchListFromJson(entityListJsonSorted),
@@ -180,7 +180,7 @@ func TestGetEntitiesType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := tt.matchProcessing.GetEntitiesType()
+			got := tt.matchProcessing.GetType()
 
 			assert.Equal(t, got, tt.want)
 
