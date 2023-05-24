@@ -285,9 +285,7 @@ func extractConfigType(context *serializerContext, config Config) (typeDefinitio
 
 	case EntityType:
 		return typeDefinition{
-			Entities: entitiesDefinition{
-				EntitiesType: t.EntitiesType,
-			},
+			Entities: entitiesDefinition(t),
 		}, nil
 
 	default:

@@ -20,11 +20,18 @@ import (
 
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/errutils"
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/log"
+	"github.com/dynatrace/dynatrace-configuration-as-code/internal/slices"
+	config "github.com/dynatrace/dynatrace-configuration-as-code/pkg/config/v2"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/match"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/match/entities"
 	project "github.com/dynatrace/dynatrace-configuration-as-code/pkg/project/v2"
 	"github.com/spf13/afero"
 )
+
+type configTypeInfo struct {
+	configTypeString string
+	configType       config.Type
+}
 
 func MatchConfigs(fs afero.Fs, matchParameters match.MatchParameters, configPerTypeSource project.ConfigsPerType, configPerTypeTarget project.ConfigsPerType) ([]string, int, int, error) {
 	configsSourceCount := 0
@@ -32,58 +39,144 @@ func MatchConfigs(fs afero.Fs, matchParameters match.MatchParameters, configPerT
 	stats := []string{fmt.Sprintf("%65s %10s %12s %10s %10s %10s", "Type", "Matched", "MultiMatched", "UnMatched", "Total", "Source")}
 	errs := []error{}
 
+	statusLegend := map[string]string{}
+	for actionLabel, actionRune := range match.ActionMap {
+		if skipConfigAction(matchParameters, actionRune) {
+			continue
+		}
+
+		statusLegend[actionLabel] = string(actionRune)
+	}
+
+	statusLegend["Multi Matched"] = "M"
+
+	matchPayload := MatchPayload{
+		Legend: MatchLegend{
+			Status: statusLegend,
+		},
+		Entities: map[string]MatchEntity{
+			allConfigEntity: {
+				Items: []MatchEntityMatches{},
+			},
+		},
+		Stats: map[rune]int{},
+	}
+
+	typeCount := len(configPerTypeTarget)
+	channel := make(chan configTypeInfo, typeCount)
 	mutex := sync.Mutex{}
 	waitGroup := sync.WaitGroup{}
-	waitGroup.Add(len(configPerTypeTarget))
+	maxThreads := 10
+	if maxThreads > typeCount {
+		maxThreads = typeCount
+	}
+	waitGroup.Add(maxThreads)
 
-	for configsTypeLoop := range configPerTypeTarget {
-		go func(configsType string) {
-			defer waitGroup.Done()
-			log.Debug("Processing Type: %s", configsType)
+	processType := func(configTypeInfo configTypeInfo) {
 
-			entityMatches, err := entities.LoadMatches(fs, matchParameters)
-			if err != nil {
-				mutex.Lock()
-				errs = append(errs, err)
-				mutex.Unlock()
-				return
-			}
+		if skipConfigType(matchParameters, configTypeInfo.configTypeString) {
+			log.Debug("Skip Type: %s", configTypeInfo.configTypeString)
+			return
+		}
 
-			configProcessingPtr, err := genConfigProcessing(configPerTypeSource, configPerTypeTarget, configsType, entityMatches)
-			if err != nil {
-				mutex.Lock()
-				errs = append(errs, err)
-				mutex.Unlock()
-				return
-			}
+		log.Debug("Processing Type: %s", configTypeInfo.configTypeString)
 
-			configsSourceCountType := len(configProcessingPtr.Source.RemainingMatch)
-			configsTargetCountType := len(configProcessingPtr.Target.RemainingMatch)
-
-			configMatches := runRules(configProcessingPtr, matchParameters)
-
-			err = writeMatches(fs, configProcessingPtr, matchParameters, configsType, configMatches)
-			if err != nil {
-				mutex.Lock()
-				errs = append(errs, fmt.Errorf("failed to persist matches of type: %s, see error: %w", configsType, err))
-				mutex.Unlock()
-				return
-			}
-
+		entityMatches, err := entities.LoadMatches(fs, matchParameters)
+		if err != nil {
 			mutex.Lock()
-			configsSourceCount += configsSourceCountType
-			configsTargetCount += configsTargetCountType
-			stats = append(stats, fmt.Sprintf("%65s %10d %12d %10d %10d %10d", configsType, len(configMatches.Matches), len(configMatches.MultiMatched), len(configMatches.UnMatched), configsTargetCountType, configsSourceCountType))
+			errs = append(errs, err)
 			mutex.Unlock()
-		}(configsTypeLoop)
+			return
+		}
+
+		configProcessingPtr, err := genConfigProcessing(fs, matchParameters, configPerTypeSource, configPerTypeTarget, configTypeInfo.configTypeString, entityMatches)
+		if err != nil {
+			mutex.Lock()
+			errs = append(errs, err)
+			mutex.Unlock()
+			return
+		}
+
+		configsSourceCountType := len(configProcessingPtr.Source.RemainingMatch)
+		configsTargetCountType := len(configProcessingPtr.Target.RemainingMatch)
+
+		configMatches, matchEntityMatches, configIdxToWriteSource, err := runRules(configProcessingPtr, matchParameters, configTypeInfo)
+		if err != nil {
+			mutex.Lock()
+			errs = append(errs, fmt.Errorf("failed to run rules for type: %s, see error: %w", configTypeInfo.configTypeString, err))
+			mutex.Unlock()
+			return
+		}
+
+		err = writeMatches(fs, configProcessingPtr, matchParameters, configTypeInfo, configMatches, configIdxToWriteSource)
+		if err != nil {
+			mutex.Lock()
+			errs = append(errs, fmt.Errorf("failed to persist matches of type: %s, see error: %w", configTypeInfo.configTypeString, err))
+			mutex.Unlock()
+			return
+		}
+
+		mutex.Lock()
+		matchEntity := matchPayload.Entities[allConfigEntity]
+		matchEntity.Items = append(matchPayload.Entities[allConfigEntity].Items, matchEntityMatches)
+		matchPayload.Entities[allConfigEntity] = matchEntity
+		for action, value := range matchEntityMatches["stats"].(map[rune]int) {
+			matchPayload.Stats[action] += value
+		}
+		configsSourceCount += configsSourceCountType
+		configsTargetCount += configsTargetCountType
+		stats = append(stats, fmt.Sprintf("%65s %10d %12d %10d %10d %10d", configTypeInfo.configTypeString, len(configMatches.Matches), len(configMatches.MultiMatched), len(configMatches.UnMatched), configsTargetCountType, configsSourceCountType))
+		mutex.Unlock()
 
 	}
 
+	for i := 0; i < maxThreads; i++ {
+
+		go func() {
+
+			for {
+				configTypeInfoLoop, ok := <-channel
+				if !ok {
+					waitGroup.Done()
+					return
+				}
+				processType(configTypeInfoLoop)
+			}
+		}()
+
+	}
+
+	for configsType, configObjectList := range configPerTypeTarget {
+		if len(configObjectList) >= 1 {
+			channel <- configTypeInfo{configsType, configObjectList[0].Type}
+		}
+	}
+
+	close(channel)
 	waitGroup.Wait()
 
 	if len(errs) >= 1 {
 		return []string{}, 0, 0, errutils.PrintAndFormatErrors(errs, "failed to match configs with required fields")
 	}
 
+	runeLabelMap := match.GetRuneLabelMap()
+	for action, total := range matchPayload.Stats {
+		log.Info("%s: %v", runeLabelMap[action], total)
+	}
+	writeMatchPayload(fs, matchParameters, matchPayload)
+
 	return stats, configsSourceCount, configsTargetCount, nil
+}
+
+func skipConfigType(matchParameters match.MatchParameters, configsType string) bool {
+	if len(matchParameters.SpecificTypes) == 0 {
+		return false
+	}
+
+	if slices.Contains(matchParameters.SpecificTypes, configsType) {
+		return matchParameters.SkipSpecificTypes
+	}
+
+	return !matchParameters.SkipSpecificTypes
+
 }

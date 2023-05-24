@@ -17,10 +17,14 @@ package rules
 const ConfigIdKey = "dtConfigId"
 const ConfigNameKey = "dtConfigName"
 const EntitiesListKey = "dtEntitiesList"
+const Settings20V1Id = "dtSettings20V1Id"
+const DownloadedKey = "downloaded"
+const ValueKey = "value"
 
 var INDEX_CONFIG_LIST_CONFIGS = []IndexRuleType{
 	{
 		IsSeed:      true,
+		SplitMatch:  true,
 		WeightValue: 100,
 		IndexRules: []IndexRule{
 			{
@@ -31,14 +35,21 @@ var INDEX_CONFIG_LIST_CONFIGS = []IndexRuleType{
 			},
 			{
 				Name:              "Scope",
-				Path:              []string{"scope"},
+				Path:              []string{DownloadedKey, "scope"},
+				WeightValue:       1,
+				SelfMatchDisabled: false,
+			},
+			{
+				Name:              "Dashboard Owner",
+				Path:              []string{DownloadedKey, ValueKey, "dashboardMetadata", "owner"},
 				WeightValue:       1,
 				SelfMatchDisabled: false,
 			},
 		},
 	},
 	{
-		IsSeed:      true,
+		IsSeed:      false,
+		SplitMatch:  false,
 		WeightValue: 90,
 		IndexRules: []IndexRule{
 			{
@@ -47,16 +58,11 @@ var INDEX_CONFIG_LIST_CONFIGS = []IndexRuleType{
 				WeightValue:       1,
 				SelfMatchDisabled: false,
 			},
-			{
-				Name:              "Dashboard Owner",
-				Path:              []string{"dashboardMetadata", "owner"},
-				WeightValue:       1,
-				SelfMatchDisabled: false,
-			},
 		},
 	},
 	{
-		IsSeed:      true,
+		IsSeed:      false,
+		SplitMatch:  false,
 		WeightValue: 50,
 		IndexRules: []IndexRule{
 			{

@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/log"
+	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/match"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/match/entities"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/match/rules"
 )
@@ -31,12 +32,15 @@ var entityExtractionRegex = regexp.MustCompile(`(((?:[A-Z]+_)?(?:[A-Z]+_)?(?:[A-
 
 var main_object_key_regex_list = []*regexp.Regexp{
 	regexp.MustCompile(`(^[Nn]ame$)`),
+	regexp.MustCompile(`(^[Dd]isplay[Nn]ame$)`),
 	regexp.MustCompile(`(^[Kk]ey$)`),
 	regexp.MustCompile(`(^[Ss]ummary$)`),
 	regexp.MustCompile(`(^[Ll]abel$)`),
 	regexp.MustCompile(`(^[Tt]itle$)`),
 	regexp.MustCompile(`(^[Pp]attern$)`),
+	regexp.MustCompile(`(^[Rr]ule[Nn]ame$)`),
 	regexp.MustCompile(`(^[Rr]ule$)`),
+	regexp.MustCompile(`(^[Ii]dentifier$)`),
 	regexp.MustCompile(`(^.*[Nn]ame$)`),
 	regexp.MustCompile(`(^.*[Kk]ey$)`),
 	regexp.MustCompile(`(^.*[Ss]ummary$)`),
@@ -44,17 +48,39 @@ var main_object_key_regex_list = []*regexp.Regexp{
 	regexp.MustCompile(`(^.*[Tt]itle$)`),
 	regexp.MustCompile(`(^.*[Pp]attern$)`),
 	regexp.MustCompile(`(^.*[Rr]ule$)`),
+	regexp.MustCompile(`(^.*[Ii]dentifier$)`),
 }
 
 func name(v *map[string]interface{}) (string, bool) {
 
 	for _, regex := range main_object_key_regex_list {
-		for key, value := range (*v)["value"].(map[string]interface{}) {
+		uniqueConfKey, uniqueConfOk := name_internal((*v)["value"], regex)
+		if uniqueConfOk {
+			return uniqueConfKey, uniqueConfOk
+		}
+	}
+
+	return "", false
+}
+
+func name_internal(v interface{}, regex *regexp.Regexp) (string, bool) {
+
+	for key, value := range v.(map[string]interface{}) {
+
+		mapInterface, mapInterfaceOk := value.(map[string]interface{})
+
+		if mapInterfaceOk {
+			uniqueConfKey, uniqueConfOk := name_internal(mapInterface, regex)
+			if uniqueConfOk {
+				return uniqueConfKey, uniqueConfOk
+			}
+
+		} else {
+
 			if regex.Match([]byte(key)) {
 				stringValue, ok := value.(string)
 				if ok && stringValue != "" {
 					return value.(string), true
-
 				}
 			}
 		}
@@ -104,20 +130,37 @@ func extractReplaceEntities(confInterface map[string]interface{}, entityMatches 
 
 }
 
-func replaceConfigs(confPtr *interface{}, confBytesPtr *[]byte, configMatchesPtr *MatchOutputType) (*string, *string, bool) {
+func replaceConfigIds(configProcessingPtr *match.MatchProcessing, sourceI int, targetI int, configTypeInfo configTypeInfo) error {
+	configIdLocation, _ := getConfigTypeInfo(configTypeInfo.configType)
 
-	configId := (*confPtr).(map[string]interface{})[rules.ConfigIdKey].(string)
+	bytes, err := json.Marshal((*configProcessingPtr.Source.RawMatchList.GetValues())[sourceI])
+	if err != nil {
+		return err
+	}
+
+	configId := (*configProcessingPtr.Source.RawMatchList.GetValues())[sourceI].(map[string]interface{})[rules.DownloadedKey].(map[string]interface{})[configIdLocation].(string)
+	if configId == "" {
+		log.Error("CONFIG ID MISSING!!!")
+	}
+	configIdTarget := (*configProcessingPtr.Target.RawMatchList.GetValues())[targetI].(map[string]interface{})[rules.DownloadedKey].(map[string]interface{})[configIdLocation].(string)
+
+	if configIdTarget != configId {
+		modifiedString := strings.ReplaceAll(string(bytes), configId, configIdTarget)
+
+		json.Unmarshal([]byte(modifiedString), (*configProcessingPtr.Source.RawMatchList.GetValues())[sourceI])
+	}
+
+	return nil
+}
+
+func replaceConfigs(confPtr *interface{}, configTypeInfo *configTypeInfo) *string {
+
+	configIdLocation, _ := getConfigTypeInfo(configTypeInfo.configType)
+
+	configId := (*confPtr).(map[string]interface{})[rules.DownloadedKey].(map[string]interface{})[configIdLocation].(string)
 	if configId == "" {
 		log.Error("CONFIG ID MISSING!!!")
 	}
 
-	configIdMatch, ok := configMatchesPtr.Matches[configId]
-	if ok {
-		if configIdMatch != configId {
-			modifiedString := strings.ReplaceAll(string(*confBytesPtr), configId, configIdMatch)
-			return &modifiedString, &configIdMatch, true
-		}
-	}
-
-	return nil, &configId, false
+	return &configId
 }

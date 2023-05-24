@@ -33,12 +33,12 @@ import (
 	valueParam "github.com/dynatrace/dynatrace-configuration-as-code/pkg/config/v2/parameter/value"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/config/v2/template"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/download/entities"
+	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/match/rules"
 	project "github.com/dynatrace/dynatrace-configuration-as-code/pkg/project/v2"
 )
 
 const ClassicIdKey = "classicId"
 const URLPathKey = "URLPath"
-const valueKey = "value"
 
 func DownloadAllConfigs(apisToDownload api.APIs, client client.Client, projectName string, flatDump bool) project.ConfigsPerType {
 	return NewDownloader(client).DownloadAll(apisToDownload, projectName, flatDump)
@@ -220,10 +220,10 @@ func (d *Downloader) downloadConfigFlat(theApi api.API, value client.Value) (str
 	toSaveDownloaded := make(map[string]interface{}, 3)
 	toSaveDownloaded[ClassicIdKey] = value.Id
 	toSaveDownloaded[URLPathKey] = theApi.URLPath
-	toSaveDownloaded[valueKey] = data
+	toSaveDownloaded[rules.ValueKey] = data
 
 	toSaveData := make(map[string]interface{}, 1)
-	toSaveData[client.DownloadedKey] = toSaveDownloaded
+	toSaveData[rules.DownloadedKey] = toSaveDownloaded
 
 	rawJson, err := json.Marshal(toSaveData)
 	if err != nil {

@@ -67,7 +67,7 @@ func genRemainingMatchList(rawMatchList RawMatchList) []int {
 	return remainingMatchList
 }
 
-func (e *MatchProcessing) GetType() string {
+func (e *MatchProcessing) GetConfigType() config.Type {
 
 	var conf config.Type
 
@@ -76,6 +76,13 @@ func (e *MatchProcessing) GetType() string {
 	} else {
 		conf = e.Target.ConfigType
 	}
+
+	return conf
+}
+
+func (e *MatchProcessing) GetType() string {
+
+	conf := e.GetConfigType()
 
 	entityType, ok := conf.(config.EntityType)
 	if ok {

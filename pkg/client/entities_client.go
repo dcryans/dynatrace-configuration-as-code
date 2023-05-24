@@ -138,16 +138,19 @@ func isInvalidReflectionValue(value reflect.Value) bool {
 	}
 }
 
-func genListEntitiesParams(entityType string, entitiesType EntitiesType, ignoreProperties []string) url.Values {
+func genListEntitiesParams(entityType string, entitiesType EntitiesType, ignoreProperties []string) (url.Values, string, string) {
+	from := genTimeframeUnixMilliString(defaultEntityDurationTimeframeFrom)
+	to := genTimeframeUnixMilliString(defaultEntityDurationTimeframeTo)
+
 	params := url.Values{
 		"entitySelector": []string{"type(\"" + entityType + "\")"},
 		"pageSize":       []string{defaultPageSizeEntities},
 		"fields":         []string{getEntitiesTypeFields(entitiesType, ignoreProperties)},
-		"from":           []string{genTimeframeUnixMilliString(defaultEntityDurationTimeframeFrom)},
-		"to":             []string{genTimeframeUnixMilliString(defaultEntityDurationTimeframeTo)},
+		"from":           []string{from},
+		"to":             []string{to},
 	}
 
-	return params
+	return params, from, to
 }
 
 func handleListEntitiesError(entityType string, resp rest.Response, run_extraction bool, ignoreProperties []string, err error) (bool, []string, error) {

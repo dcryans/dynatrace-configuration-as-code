@@ -48,6 +48,7 @@ func (i *IndexRuleMapGenerator) genActiveList() []rules.IndexRuleType {
 	for _, confType := range i.baseRuleList {
 		ruleType := rules.IndexRuleType{
 			IsSeed:      confType.IsSeed,
+			SplitMatch:  confType.SplitMatch,
 			WeightValue: confType.WeightValue,
 			IndexRules:  make([]rules.IndexRule, 0, len(confType.IndexRules)),
 		}
@@ -74,13 +75,22 @@ func (i *IndexRuleMapGenerator) genSortedActiveList() []rules.IndexRuleType {
 	return activeList
 }
 
-func runIndexRule(indexRule rules.IndexRule, entityProcessingPtr *MatchProcessing, resultListPtr *IndexCompareResultList) {
+func runIndexRule(indexRule rules.IndexRule, entityProcessingPtr *MatchProcessing, resultListPtr *IndexCompareResultList) bool {
+
+	countsTowardsMax := false
 
 	sortedIndexSource := genSortedItemsIndex(indexRule, &(*entityProcessingPtr).Source)
 	sortedIndexTarget := genSortedItemsIndex(indexRule, &(*entityProcessingPtr).Target)
 
-	compareIndexes(resultListPtr, sortedIndexSource, sortedIndexTarget, indexRule)
+	hasSkippedHugeMatch := compareIndexes(resultListPtr, sortedIndexSource, sortedIndexTarget, indexRule)
 
+	if hasSkippedHugeMatch {
+		countsTowardsMax = false
+	} else if len(sortedIndexSource) > 0 || len(sortedIndexTarget) > 0 {
+		countsTowardsMax = true
+	}
+
+	return countsTowardsMax
 }
 
 func keepMatches(matchedEntities map[int]int, uniqueMatch []CompareResult) map[int]int {
@@ -110,12 +120,16 @@ func (i *IndexRuleMapGenerator) RunIndexRuleAll(matchProcessingPtr *MatchProcess
 		resultListPtr := newIndexCompareResultList()
 		matchProcessingPtr.PrepareRemainingMatch(true, indexRuleType.IsSeed, remainingResultsPtr)
 
+		maxMatchValue := 0
 		for _, indexRule := range indexRuleType.IndexRules {
-			runIndexRule(indexRule, matchProcessingPtr, resultListPtr)
+			countsTowardsMax := runIndexRule(indexRule, matchProcessingPtr, resultListPtr)
+			if countsTowardsMax {
+				maxMatchValue += indexRule.WeightValue
+			}
 		}
 
 		resultListPtr.MergeRemainingWeightType(remainingResultsPtr)
-		uniqueMatchEntities := resultListPtr.ProcessMatches()
+		uniqueMatchEntities := resultListPtr.ProcessMatches(indexRuleType.SplitMatch, maxMatchValue)
 		remainingResultsPtr = resultListPtr
 
 		matchProcessingPtr.adjustremainingMatch(&uniqueMatchEntities)

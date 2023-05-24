@@ -33,6 +33,7 @@ import (
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/throttle"
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/version"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/api"
+	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/match/rules"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/oauth2/endpoints"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/rest"
 	version2 "github.com/dynatrace/dynatrace-configuration-as-code/pkg/version"
@@ -90,8 +91,6 @@ type DownloadSettingsObject struct {
 	Scope         string          `json:"scope"`
 	Value         json.RawMessage `json:"value"`
 }
-
-const DownloadedKey = "downloaded"
 
 type SettingsResponseRaw struct {
 	Settings []map[string]interface{} `json:"items"`
@@ -657,7 +656,7 @@ func (d *DynatraceClient) ListSettingsFlat(schemaId string, opts ListSettingsOpt
 
 		for idx, settingMap := range parsedRaw.Settings {
 			toSaveData := make(map[string]interface{}, 2)
-			toSaveData[DownloadedKey] = settingMap
+			toSaveData[rules.DownloadedKey] = settingMap
 
 			rawJson, err := json.Marshal(toSaveData)
 			if err != nil {
@@ -785,7 +784,9 @@ func (d *DynatraceClient) ListEntities(entitiesType EntitiesType) (EntitiesList,
 	var ignoreProperties []string
 
 	for runExtraction {
-		params := genListEntitiesParams(entityType, entitiesType, ignoreProperties)
+		params, from, to := genListEntitiesParams(entityType, entitiesType, ignoreProperties)
+		entityList.From = from
+		entityList.To = to
 		resp, err := d.listPaginated(pathEntitiesObjects, params, entityType, addToResult)
 
 		runExtraction, ignoreProperties, err = handleListEntitiesError(entityType, resp, runExtraction, ignoreProperties, err)

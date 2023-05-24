@@ -138,8 +138,8 @@ func downloadEntities(dtClient client.Client, opts downloadEntitiesOptions) proj
 	// download specific entity types only
 	if len(opts.specificEntitiesTypes) > 0 {
 		log.Debug("Entity Types to download: \n - %v", strings.Join(opts.specificEntitiesTypes, "\n - "))
-	} else {
 		entitiesObjects = entities.Download(dtClient, opts.specificEntitiesTypes, opts.projectName)
+	} else {
 		entitiesObjects = entities.DownloadAll(dtClient, opts.downloadOptionsShared.projectName)
 	}
 

@@ -20,6 +20,7 @@ import (
 
 type IndexRuleType struct {
 	IsSeed      bool
+	SplitMatch  bool
 	WeightValue int
 	IndexRules  []IndexRule
 }

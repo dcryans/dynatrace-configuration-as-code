@@ -33,6 +33,30 @@ var validMatchTypes = map[string]bool{
 	"configs":  true,
 }
 
+const (
+	ACTION_ADD         = "Add"
+	ACTION_DELETE      = "Delete"
+	ACTION_UPDATE      = "Update"
+	ACTION_IDENTICAL   = "Identical"
+	ACTION_PREEMPTIVE  = "Preemptive"
+	STATUS_MULTI_MATCH = "Multi Matched"
+
+	ACTION_ADD_RUNE         = 'A'
+	ACTION_DELETE_RUNE      = 'D'
+	ACTION_UPDATE_RUNE      = 'U'
+	ACTION_IDENTICAL_RUNE   = 'I'
+	ACTION_PREEMPTIVE_RUNE  = 'P'
+	STATUS_MULTI_MATCH_RUNE = 'M'
+)
+
+var ActionMap = map[string]rune{
+	ACTION_ADD:        ACTION_ADD_RUNE,
+	ACTION_DELETE:     ACTION_DELETE_RUNE,
+	ACTION_UPDATE:     ACTION_UPDATE_RUNE,
+	ACTION_IDENTICAL:  ACTION_IDENTICAL_RUNE,
+	ACTION_PREEMPTIVE: ACTION_PREEMPTIVE_RUNE,
+}
+
 const SOURCE_ENV = "Source"
 const TARGET_ENV = "Target"
 
@@ -42,14 +66,17 @@ type matchLoaderContext struct {
 }
 
 type MatchParameters struct {
-	Name             string
-	Type             string
-	WorkingDir       string
-	OutputDir        string
-	EntitiesMatchDir string
-	SelfMatch        bool
-	Source           MatchParametersEnv
-	Target           MatchParametersEnv
+	Name              string
+	Type              string
+	WorkingDir        string
+	OutputDir         string
+	EntitiesMatchDir  string
+	SkipSpecificTypes bool
+	SpecificTypes     []string
+	SpecificActions   []rune
+	SelfMatch         bool
+	Source            MatchParametersEnv
+	Target            MatchParametersEnv
 }
 
 type MatchParametersEnv struct {
@@ -65,6 +92,9 @@ type MatchFileDefinition struct {
 	Type              string            `yaml:"type"`
 	EntitiesMatchPath string            `yaml:"entitiesMatchPath,omitempty"`
 	OutputPath        string            `yaml:"outputPath"`
+	SkipSpecificTypes bool              `yaml:"skipSpecificTypes,omitempty"`
+	SpecificTypes     []string          `yaml:"specificTypes,omitempty"`
+	SpecificActions   []string          `yaml:"specificActions,omitempty"`
 	SelfMatch         bool              `yaml:"selfMatch"`
 	Source            EnvInfoDefinition `yaml:"sourceInfo"`
 	Target            EnvInfoDefinition `yaml:"targetInfo"`
@@ -198,6 +228,27 @@ func LoadMatchingParameters(fs afero.Fs, matchFileName string) (matchParameters 
 		log.Info("Entities Match Directory: %s", matchParameters.EntitiesMatchDir)
 	}
 
+	if matchFileDef.SkipSpecificTypes {
+		matchParameters.SkipSpecificTypes = matchFileDef.SkipSpecificTypes
+	}
+
+	if len(matchFileDef.SpecificTypes) > 0 {
+		matchParameters.SpecificTypes = matchFileDef.SpecificTypes
+	}
+
+	if len(matchFileDef.SpecificActions) > 0 {
+		matchParameters.SpecificActions = make([]rune, len(matchFileDef.SpecificActions))
+		for i, actionLabel := range matchFileDef.SpecificActions {
+
+			actionRune, ok := ActionMap[actionLabel]
+			if ok {
+				matchParameters.SpecificActions[i] = actionRune
+			} else {
+				errors = append(errors, fmt.Errorf("specific action does not exist: %s", actionLabel))
+			}
+		}
+	}
+
 	var errList []error
 	matchParameters.Source, errList = getParameterEnv(context, matchFileDef.Source, SOURCE_ENV)
 
@@ -228,4 +279,18 @@ func LoadMatchingParameters(fs afero.Fs, matchFileName string) (matchParameters 
 	}
 
 	return
+}
+
+func GetRuneLabelMap() map[rune]string {
+	return reverseMap(ActionMap)
+}
+
+func reverseMap(m map[string]rune) map[rune]string {
+	reversed := make(map[rune]string)
+
+	for key, value := range m {
+		reversed[value] = key
+	}
+
+	return reversed
 }

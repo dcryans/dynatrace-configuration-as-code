@@ -21,8 +21,9 @@ import (
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/match/rules"
 )
 
-func compareIndexes(resultListPtr *IndexCompareResultList, indexSource []IndexEntry, indexTarget []IndexEntry, indexRule rules.IndexRule) {
+func compareIndexes(resultListPtr *IndexCompareResultList, indexSource []IndexEntry, indexTarget []IndexEntry, indexRule rules.IndexRule) bool {
 
+	hasSkippedHugeMatch := false
 	srcI := 0
 	tgtI := 0
 
@@ -42,6 +43,7 @@ func compareIndexes(resultListPtr *IndexCompareResultList, indexSource []IndexEn
 		totalMatches := len(indexSource[srcI].matchedIds) * len(indexTarget[tgtI].matchedIds)
 		if totalMatches > 1000 {
 			log.Debug("too many matches for: %s, Nb of matches: %d", indexSource[srcI].indexValue, totalMatches)
+			hasSkippedHugeMatch = true
 			srcI++
 			tgtI++
 			continue
@@ -56,5 +58,7 @@ func compareIndexes(resultListPtr *IndexCompareResultList, indexSource []IndexEn
 		srcI++
 		tgtI++
 	}
+
+	return hasSkippedHugeMatch
 
 }

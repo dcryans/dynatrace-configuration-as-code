@@ -237,7 +237,7 @@ func shouldDownloadSettings(opts downloadConfigsOptions) bool {
 }
 
 func downloadClassicConfigs(c client.Client, apis api.APIs, specificAPIs []string, projectName string, flatDump bool) (project.ConfigsPerType, error) {
-	apisToDownload := getApisToDownload(apis, specificAPIs, flatDump)
+	apisToDownload := getApisToDownload(apis, specificAPIs)
 	if len(apisToDownload) == 0 {
 		return nil, fmt.Errorf("no APIs to download")
 	}
@@ -265,13 +265,7 @@ func downloadSettings(c client.Client, specificSchemas []string, projectName str
 }
 
 // Get all v2 apis and filter for the selected ones
-func getApisToDownload(apis api.APIs, specificAPIs []string, flatDump bool) api.APIs {
-	if flatDump {
-		mzApi := apis["management-zone"]
-		mzApi.DeprecatedBy = ""
-		apis["management-zone"] = mzApi
-	}
-
+func getApisToDownload(apis api.APIs, specificAPIs []string) api.APIs {
 	if len(specificAPIs) > 0 {
 		return apis.Filter(api.RetainByName(specificAPIs), skipDownloadFilter)
 	} else {

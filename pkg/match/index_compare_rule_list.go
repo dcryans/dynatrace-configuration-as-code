@@ -137,7 +137,7 @@ func (i *IndexCompareResultList) getUniqueMatchItems() []CompareResult {
 	return uniqueMatchItems
 }
 
-func (i *IndexCompareResultList) sumMatchWeightValues() {
+func (i *IndexCompareResultList) sumMatchWeightValues(splitMatch bool, maxMatchValue int) {
 
 	if len(i.CompareResults) <= 1 {
 		return
@@ -145,11 +145,21 @@ func (i *IndexCompareResultList) sumMatchWeightValues() {
 
 	i.sort()
 
-	summedMatchResults := []CompareResult{}
+	summedMatchResults := make([]CompareResult, 0, len(i.CompareResults))
 	prevTotal := i.CompareResults[0]
 
 	aI := 0
 	bI := 1
+
+	var addRecord = func() {
+		keepRecord := true
+		if splitMatch && prevTotal.Weight < maxMatchValue {
+			keepRecord = false
+		}
+		if keepRecord {
+			summedMatchResults = append(summedMatchResults, prevTotal)
+		}
+	}
 
 	for bI < len(i.CompareResults) {
 		a := i.CompareResults[aI]
@@ -158,7 +168,7 @@ func (i *IndexCompareResultList) sumMatchWeightValues() {
 		if a.areIdsEqual(b) {
 			prevTotal.Weight += b.Weight
 		} else {
-			summedMatchResults = append(summedMatchResults, prevTotal)
+			addRecord()
 			prevTotal = b
 		}
 
@@ -166,7 +176,7 @@ func (i *IndexCompareResultList) sumMatchWeightValues() {
 		bI++
 	}
 
-	summedMatchResults = append(summedMatchResults, prevTotal)
+	addRecord()
 
 	i.CompareResults = summedMatchResults
 
@@ -234,13 +244,13 @@ func (i *IndexCompareResultList) trimUniqueMatches(uniqueMatchItems []CompareRes
 
 }
 
-func (i *IndexCompareResultList) ProcessMatches() []CompareResult {
+func (i *IndexCompareResultList) ProcessMatches(splitMatch bool, maxMatchValue int) []CompareResult {
 
 	if len(i.CompareResults) == 0 {
 		return []CompareResult{}
 	}
 
-	i.sumMatchWeightValues()
+	i.sumMatchWeightValues(splitMatch, maxMatchValue)
 	uniqueTopMatches := extractUniqueTopMatch(i)
 
 	i.trimUniqueMatches(uniqueTopMatches)
@@ -250,7 +260,7 @@ func (i *IndexCompareResultList) ProcessMatches() []CompareResult {
 }
 
 func (i *IndexCompareResultList) MergeRemainingWeightType(remainingResults *IndexCompareResultList) {
-	i.sumMatchWeightValues()
+	i.sumMatchWeightValues(false, 0)
 	lowerMaxWeight := i.getMaxWeight()
 	remainingResults.elevateWeight(lowerMaxWeight)
 

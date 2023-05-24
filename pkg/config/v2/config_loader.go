@@ -16,12 +16,13 @@ package v2
 
 import (
 	"fmt"
-	"github.com/dynatrace/dynatrace-configuration-as-code/internal/files"
-	"github.com/dynatrace/dynatrace-configuration-as-code/internal/maps"
-	"github.com/dynatrace/dynatrace-configuration-as-code/internal/slices"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/dynatrace/dynatrace-configuration-as-code/internal/files"
+	"github.com/dynatrace/dynatrace-configuration-as-code/internal/maps"
+	"github.com/dynatrace/dynatrace-configuration-as-code/internal/slices"
 
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/config/v2/coordinate"
 	configErrors "github.com/dynatrace/dynatrace-configuration-as-code/pkg/config/v2/errors"
@@ -441,9 +442,7 @@ func getType(typeDef typeDefinition) (Type, error) {
 		}, nil
 
 	case typeDef.isEntities():
-		return EntityType{
-			EntitiesType: typeDef.Entities.EntitiesType,
-		}, nil
+		return EntityType(typeDef.Entities), nil
 
 	default:
 		return nil, fmt.Errorf("invalid typeDefinition - is neither Setting, Classic nor Entity")
