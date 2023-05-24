@@ -20,16 +20,15 @@ import (
 	"sync"
 	"time"
 
-	//"github.com/dynatrace-oss/terraform-provider-dynatrace/dynatrace/settings"
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/errutils"
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/log"
-	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/client"
 	config "github.com/dynatrace/dynatrace-configuration-as-code/pkg/config/v2"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/download/classic"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/match"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/match/entities"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/match/rules"
 	project "github.com/dynatrace/dynatrace-configuration-as-code/pkg/project/v2"
+	"github.com/spf13/afero"
 )
 
 const SettingsIdKey = "objectId"
@@ -66,7 +65,7 @@ func (r *RawConfigsList) GetValues() *[]interface{} {
 
 }
 
-func unmarshalConfigs(configPerType []config.Config, configType config.Type, entityMatches entities.MatchOutputPerType) (*RawConfigsList, error) {
+func unmarshalConfigs(configPerType []config.Config) (*RawConfigsList, error) {
 	rawConfigsList := &RawConfigsList{
 		Values: new([]interface{}),
 	}
@@ -75,19 +74,26 @@ func unmarshalConfigs(configPerType []config.Config, configType config.Type, ent
 		return rawConfigsList, nil
 	}
 
-	err := json.Unmarshal([]byte(configPerType[0].Template.Content()), rawConfigsList.Values)
+	content := configPerType[0].Template.Content()
+
+	if content == "" {
+		return rawConfigsList, nil
+	}
+
+	err := json.Unmarshal([]byte(content), rawConfigsList.Values)
 	if err != nil {
+		log.Error("Could not Unmarshal properly: %v on: \n%v", err, rawConfigsList.Values)
 		return nil, err
 	}
 
-	var configIdLocation string
-	isSettings := configType.ID() == config.SettingsTypeId
-	if isSettings {
-		configIdLocation = SettingsIdKey
-	} else {
-		configIdLocation = classic.ClassicIdKey
-	}
+	return rawConfigsList, nil
+}
 
+func enhanceConfigs(rawConfigsList *RawConfigsList, configType config.Type, entityMatches entities.MatchOutputPerType) (*RawConfigsList, error) {
+
+	configIdLocation, isSettings := getConfigTypeInfo(configType)
+
+	var err error
 	errs := []error{}
 	mutex := sync.Mutex{}
 	waitGroup := sync.WaitGroup{}
@@ -96,31 +102,81 @@ func unmarshalConfigs(configPerType []config.Config, configType config.Type, ent
 	for i, conf := range *rawConfigsList.Values {
 		go func(confIdx int, confInterface interface{}) {
 			defer waitGroup.Done()
-			confMap := confInterface.(map[string]interface{})[client.DownloadedKey].(map[string]interface{})
+			confMap := confInterface.(map[string]interface{})[rules.DownloadedKey].(map[string]interface{})
 
-			entities, confInterfaceModified, err := extractReplaceEntities(confMap, entityMatches)
-			if err != nil {
-				mutex.Lock()
-				errs = append(errs, err)
-				mutex.Unlock()
-				return
+			var entities []interface{}
+			var confInterfaceModified interface{}
+
+			if entityMatches != nil {
+				entities, confInterfaceModified, err = extractReplaceEntities(confMap, entityMatches)
+				if err != nil {
+					log.Error("Error with extractReplaceEntities: %v on: \n%v", err, confMap)
+					mutex.Lock()
+					errs = append(errs, err)
+					mutex.Unlock()
+					return
+				}
 			}
 
 			uniqueConfKey := ""
 			uniqueConfOk := false
 			var classicNameValue interface{}
+			settingsToV1IDOk := false
+			var settingsToV1ID string
 
 			if isSettings {
-				uniqueConfKey, uniqueConfOk = name(&confMap)
+
+				// TO-DO: Re-write this to use a 'path' and handle everything automatically from a slice of configs.
+				if configType.(config.SettingsType).SchemaId == "builtin:process.custom-process-monitoring-rule" {
+					uniqueConfKey += confMap[rules.ValueKey].(map[string]interface{})["condition"].(map[string]interface{})["item"].(string)
+					value, ok := confMap[rules.ValueKey].(map[string]interface{})["condition"].(map[string]interface{})["value"].(string)
+					if ok {
+						uniqueConfKey += "-"
+						uniqueConfKey += value
+					}
+					uniqueConfOk = true
+				} else if configType.(config.SettingsType).SchemaId == "builtin:process-group.advanced-detection-rule" {
+					uniqueConfKey += confMap[rules.ValueKey].(map[string]interface{})["processDetection"].(map[string]interface{})["property"].(string)
+					uniqueConfKey += "-"
+					uniqueConfKey += confMap[rules.ValueKey].(map[string]interface{})["processDetection"].(map[string]interface{})["containedString"].(string)
+					uniqueConfOk = true
+				} else if configType.(config.SettingsType).SchemaId == "builtin:rum.ip-mappings" {
+					uniqueConfKey, uniqueConfOk = confMap[rules.ValueKey].(map[string]interface{})["ip"].(string)
+				} else if configType.(config.SettingsType).SchemaId == "builtin:anomaly-detection.metric-events" {
+					value, ok := confMap[rules.ValueKey].(map[string]interface{})["eventEntityDimensionKey"].(string)
+					if ok {
+						uniqueConfKey += value
+						uniqueConfOk = true
+					}
+					value, ok = confMap[rules.ValueKey].(map[string]interface{})["summary"].(string)
+					if ok {
+						uniqueConfKey += value
+						uniqueConfOk = true
+					}
+				} else if configType.(config.SettingsType).SchemaId == "builtin:monitoredentities.generic.relation" {
+
+					value, ok := confMap[rules.ValueKey].(map[string]interface{})["fromType"].(string)
+					if ok {
+						uniqueConfKey += value
+						uniqueConfOk = true
+					}
+					value, ok = confMap[rules.ValueKey].(map[string]interface{})["toType"].(string)
+					if ok {
+						uniqueConfKey += value
+						uniqueConfOk = true
+					}
+				} else {
+					uniqueConfKey, uniqueConfOk = name(&confMap)
+				}
 			} else {
 
 				if configType.(config.ClassicApiType).Api == "dashboard" {
-					classicNameValue = confMap["dashboardMetadata"].(map[string]interface{})["name"]
+					classicNameValue = confMap[rules.ValueKey].(map[string]interface{})["dashboardMetadata"].(map[string]interface{})["name"]
 				} else {
-					name, ok := confMap["name"]
+					name, ok := confMap[rules.ValueKey].(map[string]interface{})["name"]
 					if ok {
 						classicNameValue = name
-					} else if displayName, ok := confMap["displayName"]; ok {
+					} else if displayName, ok := confMap[rules.ValueKey].(map[string]interface{})["displayName"]; ok {
 						classicNameValue = displayName
 					}
 				}
@@ -128,7 +184,7 @@ func unmarshalConfigs(configPerType []config.Config, configType config.Type, ent
 
 			mutex.Lock()
 			if confInterfaceModified != nil {
-				(*rawConfigsList.Values)[confIdx].(map[string]interface{})[client.DownloadedKey] = confInterfaceModified
+				(*rawConfigsList.Values)[confIdx].(map[string]interface{})[rules.DownloadedKey] = confInterfaceModified
 			}
 			(*rawConfigsList.Values)[confIdx].(map[string]interface{})[rules.ConfigIdKey] = confMap[configIdLocation].(string)
 			(*rawConfigsList.Values)[confIdx].(map[string]interface{})[rules.EntitiesListKey] = entities
@@ -137,6 +193,9 @@ func unmarshalConfigs(configPerType []config.Config, configType config.Type, ent
 				(*rawConfigsList.Values)[confIdx].(map[string]interface{})[rules.ConfigNameKey] = uniqueConfKey
 			} else if classicNameValue != nil {
 				(*rawConfigsList.Values)[confIdx].(map[string]interface{})[rules.ConfigNameKey] = classicNameValue
+			}
+			if settingsToV1IDOk {
+				(*rawConfigsList.Values)[confIdx].(map[string]interface{})[rules.Settings20V1Id] = settingsToV1ID
 			}
 			mutex.Unlock()
 		}(i, conf)
@@ -152,30 +211,57 @@ func unmarshalConfigs(configPerType []config.Config, configType config.Type, ent
 	return rawConfigsList, err
 }
 
-func genConfigProcessing(configPerTypeSource project.ConfigsPerType, configPerTypeTarget project.ConfigsPerType, configsType string, entityMatches entities.MatchOutputPerType) (*match.MatchProcessing, error) {
+func getConfigTypeInfo(configType config.Type) (string, bool) {
+	var configIdLocation string
+	isSettings := configType.ID() == config.SettingsTypeId
+	if isSettings {
+		configIdLocation = SettingsIdKey
+	} else {
+		configIdLocation = classic.ClassicIdKey
+	}
+	return configIdLocation, isSettings
+}
+
+func genConfigProcessing(fs afero.Fs, matchParameters match.MatchParameters, configPerTypeSource project.ConfigsPerType, configPerTypeTarget project.ConfigsPerType, configsType string, entityMatches entities.MatchOutputPerType) (*match.MatchProcessing, error) {
 
 	startTime := time.Now()
-
-	var sourceType config.Type
-	if len(configPerTypeSource[configsType]) > 0 {
-		sourceType = configPerTypeSource[configsType][0].Type
-	}
+	log.Debug("Enhancing %s", configsType)
+	configObjectListSource := configPerTypeSource[configsType]
 
 	//rawConfigsSource, err := convertConfigSliceToRawList(configPerTypeSource[configsType])
-	rawConfigsSource, err := unmarshalConfigs(configPerTypeSource[configsType], sourceType, entityMatches)
+	rawConfigsSource, err := unmarshalConfigs(configObjectListSource)
 	if err != nil {
 		return nil, err
 	}
 
+	var sourceType config.Type
+	if len(configObjectListSource) >= 1 {
+		sourceType = configObjectListSource[0].Type
+
+		rawConfigsSource, err = enhanceConfigs(rawConfigsSource, sourceType, entityMatches)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	configObjectListTarget := configPerTypeTarget[configsType]
+
+	//rawConfigsTarget, err := convertConfigSliceToRawList(configObjectListTarget)
+	rawConfigsTarget, err := unmarshalConfigs(configObjectListTarget)
+	if err != nil {
+		return nil, err
+	}
 	var targetType config.Type
-	if len(configPerTypeTarget[configsType]) > 0 {
-		targetType = configPerTypeTarget[configsType][0].Type
-	}
+	if len(configObjectListTarget) >= 1 {
+		targetType = configObjectListTarget[0].Type
 
-	//rawConfigsTarget, err := convertConfigSliceToRawList(configPerTypeTarget[configsType])
-	rawConfigsTarget, err := unmarshalConfigs(configPerTypeTarget[configsType], targetType, nil)
-	if err != nil {
-		return nil, err
+		configTypeInfoTarget := configTypeInfo{configsType, configObjectListTarget[0].Type}
+		writeTarFile(fs, matchParameters.OutputDir, true, configTypeInfoTarget, rawConfigsTarget.Values, nil)
+
+		rawConfigsTarget, err = enhanceConfigs(rawConfigsTarget, targetType, nil)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	log.Debug("Enhanced %s in %v", configsType, time.Since(startTime))
