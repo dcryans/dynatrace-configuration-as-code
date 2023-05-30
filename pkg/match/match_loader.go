@@ -281,15 +281,15 @@ func LoadMatchingParameters(fs afero.Fs, matchFileName string) (matchParameters 
 	return
 }
 
-func GetRuneLabelMap() map[rune]string {
+func GetRuneLabelMap() map[string]string {
 	return reverseMap(ActionMap)
 }
 
-func reverseMap(m map[string]rune) map[rune]string {
-	reversed := make(map[rune]string)
+func reverseMap(m map[string]rune) map[string]string {
+	reversed := make(map[string]string)
 
 	for key, value := range m {
-		reversed[value] = key
+		reversed[string(value)] = key
 	}
 
 	return reversed

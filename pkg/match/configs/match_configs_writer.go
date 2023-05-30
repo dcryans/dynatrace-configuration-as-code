@@ -40,7 +40,7 @@ func genMultiMatchedMap(matchParameters match.MatchParameters, remainingResultsP
 		"schemaId": configsType,
 		"unique":   true,
 		"data":     MatchEntityMatch{},
-		"stats":    map[rune]int{},
+		"stats":    map[string]int{},
 	}
 
 	multiMatched := map[string][]string{}
@@ -199,7 +199,7 @@ func addConfigResult(matchParameters match.MatchParameters, configProcessingPtr 
 		"monaco_id":   configId,
 	}
 	(*matchEntityMatches)[fmt.Sprint(matchNum)] = status
-	(*matchEntityMatches)["stats"].(map[rune]int)[action] += 1
+	(*matchEntityMatches)["stats"].(map[string]int)[status] += 1
 
 	return nil
 }
@@ -256,7 +256,7 @@ type ExtractionInfo struct {
 type MatchPayload struct {
 	Legend   MatchLegend            `json:"legend"`
 	Entities map[string]MatchEntity `json:"entities"`
-	Stats    map[rune]int           `json:"stats"`
+	Stats    map[string]int         `json:"stats"`
 }
 
 type MatchLegend struct {
