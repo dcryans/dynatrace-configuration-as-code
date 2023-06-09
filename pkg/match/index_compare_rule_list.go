@@ -18,15 +18,28 @@ import (
 	"sort"
 
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/log"
+	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/match/rules"
 )
 
 type IndexCompareResultList struct {
-	CompareResults []CompareResult
+	RuleType        rules.IndexRuleType
+	CompareResults  []CompareResult
+	PostProcessList []PostProcess
 }
 
-func newIndexCompareResultList() *IndexCompareResultList {
+type PostProcess struct {
+	RuleType rules.IndexRuleType
+	Rule     rules.IndexRule
+	LeftMap  map[int]bool
+	RightMap map[int]bool
+	Done     map[int]map[int]bool
+}
+
+func newIndexCompareResultList(ruleType rules.IndexRuleType) *IndexCompareResultList {
 	i := new(IndexCompareResultList)
+	i.RuleType = ruleType
 	i.CompareResults = []CompareResult{}
+	i.PostProcessList = []PostProcess{}
 	return i
 }
 
@@ -49,6 +62,26 @@ func newReversedIndexCompareResultList(sourceList *IndexCompareResultList) *Inde
 
 func (i *IndexCompareResultList) addResult(entityIdSource int, entityIdTarget int, WeightValue int) {
 	i.CompareResults = append(i.CompareResults, CompareResult{entityIdSource, entityIdTarget, WeightValue})
+}
+
+func (i *IndexCompareResultList) addPostProcess(ruleType rules.IndexRuleType, rule rules.IndexRule, leftList []int, rightList []int) {
+
+	postProcess := PostProcess{
+		RuleType: ruleType,
+		Rule:     rule,
+		LeftMap:  make(map[int]bool, len(leftList)),
+		RightMap: make(map[int]bool, len(rightList)),
+		Done:     map[int]map[int]bool{},
+	}
+
+	for _, id := range leftList {
+		postProcess.LeftMap[id] = true
+	}
+	for _, id := range rightList {
+		postProcess.RightMap[id] = true
+	}
+
+	i.PostProcessList = append(i.PostProcessList, postProcess)
 }
 
 func (i *IndexCompareResultList) sortTopMatches() {
@@ -152,11 +185,14 @@ func (i *IndexCompareResultList) sumMatchWeightValues(splitMatch bool, maxMatchV
 	bI := 1
 
 	var addRecord = func() {
-		keepRecord := true
 		if splitMatch && prevTotal.Weight < maxMatchValue {
-			keepRecord = false
+			return
 		}
+
+		keepRecord := i.postProcess(&prevTotal)
+
 		if keepRecord {
+			log.Info("EEE %v", prevTotal)
 			summedMatchResults = append(summedMatchResults, prevTotal)
 		}
 	}
@@ -180,6 +216,36 @@ func (i *IndexCompareResultList) sumMatchWeightValues(splitMatch bool, maxMatchV
 
 	i.CompareResults = summedMatchResults
 
+}
+
+func (i *IndexCompareResultList) postProcess(prevTotal *CompareResult) bool {
+	keepRecord := true
+
+	for idx, postProcess := range i.PostProcessList {
+		leftDoneMap, ok := postProcess.Done[prevTotal.LeftId]
+		if ok {
+			isDone, ok := leftDoneMap[prevTotal.RightId]
+			if ok && isDone {
+				log.Info("DDD %v", prevTotal)
+				continue
+			}
+		} else {
+			i.PostProcessList[idx].Done[prevTotal.LeftId] = map[int]bool{}
+			log.Info("CCC %v", prevTotal)
+		}
+
+		if postProcess.LeftMap[prevTotal.LeftId] && postProcess.RightMap[prevTotal.RightId] {
+			prevTotal.Weight += postProcess.Rule.WeightValue
+			log.Info("AAA %v", prevTotal)
+		} else if postProcess.RuleType.SplitMatch {
+			keepRecord = false
+			log.Info("BBB %v", prevTotal)
+		}
+
+		i.PostProcessList[idx].Done[prevTotal.LeftId][prevTotal.RightId] = true
+	}
+
+	return keepRecord
 }
 
 func (i *IndexCompareResultList) getMaxWeight() int {

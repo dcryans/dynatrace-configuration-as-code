@@ -33,11 +33,11 @@ import (
 	"github.com/spf13/afero"
 )
 
-func genMultiMatchedMap(matchParameters match.MatchParameters, remainingResultsPtr *match.IndexCompareResultList, configProcessingPtr *match.MatchProcessing, configsType string) (map[string][]string, MatchStatus, MatchEntityMatches, error) {
+func genMultiMatchedMap(matchParameters match.MatchParameters, remainingResultsPtr *match.IndexCompareResultList, configProcessingPtr *match.MatchProcessing, configsTypeInfo configTypeInfo, configIdxToWriteSource *[]bool) (map[string][]string, MatchStatus, MatchEntityMatches, error) {
 
 	matchEntityMatches := MatchEntityMatches{
 		"scope":    "all_configs",
-		"schemaId": configsType,
+		"schemaId": configsTypeInfo.configTypeString,
 		"unique":   true,
 		"data":     MatchEntityMatch{},
 		"stats":    map[string]int{},
@@ -73,7 +73,10 @@ func genMultiMatchedMap(matchParameters match.MatchParameters, remainingResultsP
 
 			var err error
 
-			areConfigsIdentical := areConfigsIdentical(configProcessingPtr, currentSourceId, targetId)
+			areConfigsIdentical, err := areConfigsIdentical(configProcessingPtr, currentSourceId, targetId, configsTypeInfo)
+			if err != nil {
+				return err
+			}
 
 			actionStatus := match.ACTION_UPDATE_RUNE
 			if areConfigsIdentical {
@@ -81,7 +84,7 @@ func genMultiMatchedMap(matchParameters match.MatchParameters, remainingResultsP
 			}
 
 			status := string(actionStatus) + ", " + string(matchStatus.Target.errorStatus[targetId])
-			err = addConfigResult(matchParameters, configProcessingPtr, &matchEntityMatches, nil, ConfigResultParam{currentSourceId, targetId, status, actionStatus})
+			err = addConfigResult(matchParameters, configProcessingPtr, &matchEntityMatches, configIdxToWriteSource, ConfigResultParam{currentSourceId, targetId, status, actionStatus})
 			if err != nil {
 				return err
 			}
@@ -227,10 +230,10 @@ func printMultiMatchedSample(remainingResultsPtr *match.IndexCompareResultList, 
 
 }
 
-func getMultiMatched(matchParameters match.MatchParameters, remainingResultsPtr *match.IndexCompareResultList, configProcessingPtr *match.MatchProcessing, configsType string) (map[string][]string, MatchStatus, MatchEntityMatches, error) {
+func getMultiMatched(matchParameters match.MatchParameters, remainingResultsPtr *match.IndexCompareResultList, configProcessingPtr *match.MatchProcessing, configsTypeInfo configTypeInfo, configIdxToWriteSource *[]bool) (map[string][]string, MatchStatus, MatchEntityMatches, error) {
 	printMultiMatchedSample(remainingResultsPtr, configProcessingPtr)
 
-	return genMultiMatchedMap(matchParameters, remainingResultsPtr, configProcessingPtr, configsType)
+	return genMultiMatchedMap(matchParameters, remainingResultsPtr, configProcessingPtr, configsTypeInfo, configIdxToWriteSource)
 
 }
 
@@ -291,7 +294,9 @@ const allConfigEntity = "all_configs"
 
 func genOutputPayload(matchParameters match.MatchParameters, configProcessingPtr *match.MatchProcessing, remainingResultsPtr *match.IndexCompareResultList, matchedConfigs *map[int]int, configsTypeInfo configTypeInfo) (MatchOutputType, MatchEntityMatches, []bool, error) {
 
-	multiMatchedMap, matchStatus, matchEntityMatches, err := getMultiMatched(matchParameters, remainingResultsPtr, configProcessingPtr, configsTypeInfo.configTypeString)
+	configIdxToWriteSource := make([]bool, len(*configProcessingPtr.Source.RawMatchList.GetValues()))
+
+	multiMatchedMap, matchStatus, matchEntityMatches, err := getMultiMatched(matchParameters, remainingResultsPtr, configProcessingPtr, configsTypeInfo, &configIdxToWriteSource)
 	if err != nil {
 		return MatchOutputType{}, MatchEntityMatches{}, nil, err
 	}
@@ -317,15 +322,15 @@ func genOutputPayload(matchParameters match.MatchParameters, configProcessingPtr
 		Exceed:       make([]string, len(*configProcessingPtr.Target.CurrentRemainingMatch)),
 	}
 
-	configIdxToWriteSource := make([]bool, len(*configProcessingPtr.Source.RawMatchList.GetValues()))
 	updateConfigResultParamList := make([]ConfigResultParam, 0)
 	identicalConfigResultParamList := make([]ConfigResultParam, 0)
 
 	for sourceI, targetI := range *matchedConfigs {
 
-		replaceConfigIds(configProcessingPtr, sourceI, targetI, configsTypeInfo)
-
-		areConfigsIdentical := areConfigsIdentical(configProcessingPtr, sourceI, targetI)
+		areConfigsIdentical, err := areConfigsIdentical(configProcessingPtr, sourceI, targetI, configsTypeInfo)
+		if err != nil {
+			return MatchOutputType{}, MatchEntityMatches{}, nil, err
+		}
 
 		var actionStatus rune
 		if areConfigsIdentical {
@@ -396,17 +401,23 @@ func (a sortableKeyedSlice) Less(i, j int) bool {
 	return strings.Compare(a[i].key, a[j].key) <= -1
 }
 
-func areConfigsIdentical(configProcessingPtr *match.MatchProcessing, sourceI int, targetI int) bool {
+func areConfigsIdentical(configProcessingPtr *match.MatchProcessing, sourceI int, targetI int, configTypeInfo configTypeInfo) (bool, error) {
+
+	sourceReplaced, err := replaceConfigIds(configProcessingPtr, sourceI, targetI, configTypeInfo)
+	if err != nil {
+		return false, err
+	}
+
 	areConfigsIdentical := reflect.DeepEqual(
-		(*configProcessingPtr.Source.RawMatchList.GetValues())[sourceI].(map[string]interface{})[rules.DownloadedKey].(map[string]interface{})[rules.ValueKey],
+		sourceReplaced.(map[string]interface{})[rules.DownloadedKey].(map[string]interface{})[rules.ValueKey],
 		(*configProcessingPtr.Target.RawMatchList.GetValues())[targetI].(map[string]interface{})[rules.DownloadedKey].(map[string]interface{})[rules.ValueKey],
 	)
 
 	if areConfigsIdentical {
-		return areConfigsIdentical
+		return areConfigsIdentical, nil
 	}
 
-	for key, sliceSourceInterface := range (*configProcessingPtr.Source.RawMatchList.GetValues())[sourceI].(map[string]interface{})[rules.DownloadedKey].(map[string]interface{})[rules.ValueKey].(map[string]interface{}) {
+	for key, sliceSourceInterface := range sourceReplaced.(map[string]interface{})[rules.DownloadedKey].(map[string]interface{})[rules.ValueKey].(map[string]interface{}) {
 		sliceSource, isSlice := sliceSourceInterface.([]interface{})
 
 		if !(isSlice) {
@@ -434,11 +445,11 @@ func areConfigsIdentical(configProcessingPtr *match.MatchProcessing, sourceI int
 		orderedSliceSource, _ := reOrderSlice(sliceSourceInterface, false)
 		orderedSliceTarget, _ := reOrderSlice(sliceTargetInterface, false)
 
-		(*configProcessingPtr.Source.RawMatchList.GetValues())[sourceI].(map[string]interface{})[rules.DownloadedKey].(map[string]interface{})[rules.ValueKey].(map[string]interface{})[key] = orderedSliceSource
+		sourceReplaced.(map[string]interface{})[rules.DownloadedKey].(map[string]interface{})[rules.ValueKey].(map[string]interface{})[key] = orderedSliceSource
 		(*configProcessingPtr.Target.RawMatchList.GetValues())[targetI].(map[string]interface{})[rules.DownloadedKey].(map[string]interface{})[rules.ValueKey].(map[string]interface{})[key] = orderedSliceTarget
 
 		areConfigsIdentical = reflect.DeepEqual(
-			(*configProcessingPtr.Source.RawMatchList.GetValues())[sourceI].(map[string]interface{})[rules.DownloadedKey].(map[string]interface{})[rules.ValueKey],
+			sourceReplaced.(map[string]interface{})[rules.DownloadedKey].(map[string]interface{})[rules.ValueKey],
 			(*configProcessingPtr.Target.RawMatchList.GetValues())[targetI].(map[string]interface{})[rules.DownloadedKey].(map[string]interface{})[rules.ValueKey],
 		)
 
@@ -448,7 +459,7 @@ func areConfigsIdentical(configProcessingPtr *match.MatchProcessing, sourceI int
 
 	}
 
-	return areConfigsIdentical
+	return areConfigsIdentical, nil
 }
 
 func reOrderSlice(slice interface{}, returnMasterKey bool) (interface{}, string) {
@@ -579,8 +590,8 @@ func writeTarFile(fs afero.Fs, outputDir string, isImport bool, configTypeInfo c
 	tarDir := path.Join(outputDir, cacheDir)
 	sanitizedType := config.Sanitize(configTypeInfo.configTypeString)
 
-	if sanitizedType == "custom-service-nodejs" {
-		log.Error("custom-service-nodejs not exported properly by terraform, skipping it for now")
+	if configTypeInfo.configTypeString == "custom-service-nodejs" || configTypeInfo.configTypeString == "builtin:process-group.cloud-application-workload-detection" {
+		log.Error("%s %s", configTypeInfo.configTypeString, "not exported properly by terraform, skipping it for now")
 		return nil
 	}
 

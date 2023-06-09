@@ -19,6 +19,7 @@ import (
 )
 
 type IndexRuleType struct {
+	Key         int
 	IsSeed      bool
 	SplitMatch  bool
 	WeightValue int

@@ -45,8 +45,9 @@ func (i *IndexRuleMapGenerator) genActiveList() []rules.IndexRuleType {
 
 	activeList := make([]rules.IndexRuleType, 0, len(i.baseRuleList))
 
-	for _, confType := range i.baseRuleList {
+	for idx, confType := range i.baseRuleList {
 		ruleType := rules.IndexRuleType{
+			Key:         idx,
 			IsSeed:      confType.IsSeed,
 			SplitMatch:  confType.SplitMatch,
 			WeightValue: confType.WeightValue,
@@ -75,16 +76,16 @@ func (i *IndexRuleMapGenerator) genSortedActiveList() []rules.IndexRuleType {
 	return activeList
 }
 
-func runIndexRule(indexRule rules.IndexRule, entityProcessingPtr *MatchProcessing, resultListPtr *IndexCompareResultList) bool {
+func runIndexRule(indexRule rules.IndexRule, indexRuleType rules.IndexRuleType, entityProcessingPtr *MatchProcessing, resultListPtr *IndexCompareResultList) bool {
 
 	countsTowardsMax := false
 
 	sortedIndexSource := genSortedItemsIndex(indexRule, &(*entityProcessingPtr).Source)
 	sortedIndexTarget := genSortedItemsIndex(indexRule, &(*entityProcessingPtr).Target)
 
-	hasSkippedHugeMatch := compareIndexes(resultListPtr, sortedIndexSource, sortedIndexTarget, indexRule)
+	needsPostProcessing := compareIndexes(resultListPtr, sortedIndexSource, sortedIndexTarget, indexRule, indexRuleType)
 
-	if hasSkippedHugeMatch {
+	if needsPostProcessing {
 		countsTowardsMax = false
 	} else if len(sortedIndexSource) > 0 || len(sortedIndexTarget) > 0 {
 		countsTowardsMax = true
@@ -117,12 +118,12 @@ func (i *IndexRuleMapGenerator) RunIndexRuleAll(matchProcessingPtr *MatchProcess
 		matchProcessingPtr.Source.RawMatchList.Len(), matchProcessingPtr.Target.RawMatchList.Len())
 
 	for _, indexRuleType := range ruleTypes {
-		resultListPtr := newIndexCompareResultList()
+		resultListPtr := newIndexCompareResultList(indexRuleType)
 		matchProcessingPtr.PrepareRemainingMatch(true, indexRuleType.IsSeed, remainingResultsPtr)
 
 		maxMatchValue := 0
 		for _, indexRule := range indexRuleType.IndexRules {
-			countsTowardsMax := runIndexRule(indexRule, matchProcessingPtr, resultListPtr)
+			countsTowardsMax := runIndexRule(indexRule, indexRuleType, matchProcessingPtr, resultListPtr)
 			if countsTowardsMax {
 				maxMatchValue += indexRule.WeightValue
 			}

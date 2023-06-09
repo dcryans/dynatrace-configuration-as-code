@@ -17,13 +17,12 @@ package match
 import (
 	"strings"
 
-	"github.com/dynatrace/dynatrace-configuration-as-code/internal/log"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/match/rules"
 )
 
-func compareIndexes(resultListPtr *IndexCompareResultList, indexSource []IndexEntry, indexTarget []IndexEntry, indexRule rules.IndexRule) bool {
+func compareIndexes(resultListPtr *IndexCompareResultList, indexSource []IndexEntry, indexTarget []IndexEntry, indexRule rules.IndexRule, indexRuleType rules.IndexRuleType) bool {
 
-	hasSkippedHugeMatch := false
+	needsPostProcessing := false
 	srcI := 0
 	tgtI := 0
 
@@ -42,8 +41,8 @@ func compareIndexes(resultListPtr *IndexCompareResultList, indexSource []IndexEn
 
 		totalMatches := len(indexSource[srcI].matchedIds) * len(indexTarget[tgtI].matchedIds)
 		if totalMatches > 1000 {
-			log.Debug("too many matches for: %s, Nb of matches: %d", indexSource[srcI].indexValue, totalMatches)
-			hasSkippedHugeMatch = true
+			needsPostProcessing = true
+			(*resultListPtr).addPostProcess(indexRuleType, indexRule, indexSource[srcI].matchedIds, indexTarget[tgtI].matchedIds)
 			srcI++
 			tgtI++
 			continue
@@ -59,6 +58,6 @@ func compareIndexes(resultListPtr *IndexCompareResultList, indexSource []IndexEn
 		tgtI++
 	}
 
-	return hasSkippedHugeMatch
+	return needsPostProcessing
 
 }

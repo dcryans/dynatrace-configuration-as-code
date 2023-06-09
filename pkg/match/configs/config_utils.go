@@ -130,13 +130,8 @@ func extractReplaceEntities(confInterface map[string]interface{}, entityMatches 
 
 }
 
-func replaceConfigIds(configProcessingPtr *match.MatchProcessing, sourceI int, targetI int, configTypeInfo configTypeInfo) error {
+func replaceConfigIds(configProcessingPtr *match.MatchProcessing, sourceI int, targetI int, configTypeInfo configTypeInfo) (interface{}, error) {
 	configIdLocation, _ := getConfigTypeInfo(configTypeInfo.configType)
-
-	bytes, err := json.Marshal((*configProcessingPtr.Source.RawMatchList.GetValues())[sourceI])
-	if err != nil {
-		return err
-	}
 
 	configId := (*configProcessingPtr.Source.RawMatchList.GetValues())[sourceI].(map[string]interface{})[rules.DownloadedKey].(map[string]interface{})[configIdLocation].(string)
 	if configId == "" {
@@ -144,13 +139,22 @@ func replaceConfigIds(configProcessingPtr *match.MatchProcessing, sourceI int, t
 	}
 	configIdTarget := (*configProcessingPtr.Target.RawMatchList.GetValues())[targetI].(map[string]interface{})[rules.DownloadedKey].(map[string]interface{})[configIdLocation].(string)
 
-	if configIdTarget != configId {
-		modifiedString := strings.ReplaceAll(string(bytes), configId, configIdTarget)
-
-		json.Unmarshal([]byte(modifiedString), (*configProcessingPtr.Source.RawMatchList.GetValues())[sourceI])
+	bytes, err := json.Marshal((*configProcessingPtr.Source.RawMatchList.GetValues())[sourceI])
+	if err != nil {
+		return nil, err
 	}
 
-	return nil
+	if configIdTarget != configId {
+
+		modifiedString := strings.ReplaceAll(string(bytes), configId, configIdTarget)
+
+		var resultInterface interface{}
+		json.Unmarshal([]byte(modifiedString), &resultInterface)
+		return resultInterface, nil
+
+	}
+
+	return (*configProcessingPtr.Source.RawMatchList.GetValues())[sourceI], nil
 }
 
 func replaceConfigs(confPtr *interface{}, configTypeInfo *configTypeInfo) *string {
@@ -163,4 +167,12 @@ func replaceConfigs(confPtr *interface{}, configTypeInfo *configTypeInfo) *strin
 	}
 
 	return &configId
+}
+
+func checkAndReplace(valueKey *map[string]interface{}, key, configId, configIdTarget string) {
+	value, ok := (*valueKey)[key]
+	if ok && value == configId {
+		log.Error("FOUND ID IN THE VALUE TO CHANGE!!!: ", value, "\n", configIdTarget)
+		(*valueKey)[key] = configIdTarget
+	}
 }
