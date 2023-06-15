@@ -54,12 +54,8 @@ func MatchConfigs(fs afero.Fs, matchParameters match.MatchParameters, configPerT
 		Legend: MatchLegend{
 			Status: statusLegend,
 		},
-		Entities: map[string]MatchEntity{
-			allConfigEntity: {
-				Items: []MatchEntityMatches{},
-			},
-		},
-		Stats: map[string]int{},
+		Modules: []Module{},
+		Stats:   map[string]int{},
 	}
 
 	typeCount := len(configPerTypeTarget)
@@ -117,9 +113,7 @@ func MatchConfigs(fs afero.Fs, matchParameters match.MatchParameters, configPerT
 		}
 
 		mutex.Lock()
-		matchEntity := matchPayload.Entities[allConfigEntity]
-		matchEntity.Items = append(matchPayload.Entities[allConfigEntity].Items, matchEntityMatches)
-		matchPayload.Entities[allConfigEntity] = matchEntity
+		matchPayload.Modules = append(matchPayload.Modules, matchEntityMatches)
 		for action, value := range matchEntityMatches["stats"].(map[string]int) {
 			matchPayload.Stats[action] += value
 		}
