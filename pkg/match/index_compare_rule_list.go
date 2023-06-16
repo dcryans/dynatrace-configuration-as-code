@@ -192,7 +192,6 @@ func (i *IndexCompareResultList) sumMatchWeightValues(splitMatch bool, maxMatchV
 		keepRecord := i.postProcess(&prevTotal)
 
 		if keepRecord {
-			log.Info("EEE %v", prevTotal)
 			summedMatchResults = append(summedMatchResults, prevTotal)
 		}
 	}
@@ -226,20 +225,16 @@ func (i *IndexCompareResultList) postProcess(prevTotal *CompareResult) bool {
 		if ok {
 			isDone, ok := leftDoneMap[prevTotal.RightId]
 			if ok && isDone {
-				log.Info("DDD %v", prevTotal)
 				continue
 			}
 		} else {
 			i.PostProcessList[idx].Done[prevTotal.LeftId] = map[int]bool{}
-			log.Info("CCC %v", prevTotal)
 		}
 
 		if postProcess.LeftMap[prevTotal.LeftId] && postProcess.RightMap[prevTotal.RightId] {
 			prevTotal.Weight += postProcess.Rule.WeightValue
-			log.Info("AAA %v", prevTotal)
 		} else if postProcess.RuleType.SplitMatch {
 			keepRecord = false
-			log.Info("BBB %v", prevTotal)
 		}
 
 		i.PostProcessList[idx].Done[prevTotal.LeftId][prevTotal.RightId] = true
