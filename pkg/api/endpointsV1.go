@@ -123,6 +123,12 @@ var configEndpointsV1 = []API{
 		PropertyNameOfGetAllResponse: StandardApiPropertyNameOfGetAllResponse,
 	},
 	{
+		ID:                           "application-web-keyUserActions",
+		URLPath:                      "/api/config/v1/applications/web",
+		URLSuffix:                    "keyUserActions",
+		PropertyNameOfGetAllResponse: StandardApiPropertyNameOfGetAllResponse,
+	},
+	{
 		ID:                           "application-mobile",
 		URLPath:                      "/api/config/v1/applications/mobile",
 		PropertyNameOfGetAllResponse: StandardApiPropertyNameOfGetAllResponse,

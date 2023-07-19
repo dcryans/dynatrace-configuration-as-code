@@ -54,6 +54,7 @@ type ConfigClient interface {
 	// It calls the underlying GET endpoint for the API. E.g. for alerting profiles this would be:
 	//    GET <environment-url>/api/config/v1/alertingProfiles/<id> ... to get the alerting profile
 	ReadConfigById(a api.API, id string) (json []byte, err error)
+	ReadConfigByIdSubId(a api.API, id string, subId string) (json []byte, err error)
 
 	// UpsertConfigByName creates a given Dynatrace config if it doesn't exist and updates it otherwise using its name.
 	// It calls the underlying GET, POST, and PUT endpoints for the API. E.g. for alerting profiles this would be:
@@ -141,11 +142,13 @@ const reducedListSettingsFields = "objectId,externalId,schemaVersion,schemaId,sc
 const defaultPageSize = "500"
 const defaultPageSizeEntities = "4000"
 
-const defaultEntityDurationTimeframeFrom = -5 * 7 * 24 * time.Hour
+const DefaultEntityWeeksTimeframeFrom = 5
+const DefaultEntityMinutesTimeframeFrom = -1 * DefaultEntityWeeksTimeframeFrom * 7 * 24 * 60
 
 // Not extracting the last 10 minutes to make sure what we extract is stable
 // And avoid extracting more entities than the TotalCount from the first page of extraction
-const defaultEntityDurationTimeframeTo = -10 * time.Minute
+const DefaultEntityMinutesTimeframeTo = 0
+const DefaultEntityDurationTimeframeTo = -1 * DefaultEntityMinutesTimeframeTo * time.Minute
 
 // ListSettingsOptions are additional options for the ListSettings method
 // of the Settings client
@@ -174,7 +177,7 @@ type EntitiesClient interface {
 	ListEntitiesTypes() ([]EntitiesType, error)
 
 	// ListEntities returns all entities objects for a given type.
-	ListEntities(EntitiesType) (EntitiesList, error)
+	ListEntities(EntitiesType, int, int) (EntitiesList, error)
 }
 
 //go:generate mockgen -source=client.go -destination=client_mock.go -package=client DynatraceClient
@@ -491,13 +494,26 @@ func (d *DynatraceClient) ListConfigs(api api.API) (values []Value, err error) {
 }
 
 func (d *DynatraceClient) ReadConfigById(api api.API, id string) (json []byte, err error) {
+	return d.ReadConfigByIdSubId(api, id, "")
+}
+
+func (d *DynatraceClient) ReadConfigByIdSubId(api api.API, id string, subId string) (json []byte, err error) {
 	var dtUrl string
 	isSingleConfigurationApi := api.SingleConfiguration
 
 	if isSingleConfigurationApi {
 		dtUrl = api.CreateURL(d.environmentURLClassic)
+	} else if api.URLSuffix != "" {
+		dtUrl = api.CreateURL(d.environmentURLClassic) + "/" + url.PathEscape(id) + "/" + api.URLSuffix
+		if subId != "" {
+			dtUrl = dtUrl + "/" + subId
+		}
 	} else {
 		dtUrl = api.CreateURL(d.environmentURLClassic) + "/" + url.PathEscape(id)
+	}
+
+	if (api.URLQueryParams) != "" {
+		dtUrl += "?" + api.URLQueryParams
 	}
 
 	response, err := rest.Get(d.clientClassic, dtUrl)
@@ -751,7 +767,7 @@ func genTimeframeUnixMilliString(duration time.Duration) string {
 	return strconv.FormatInt(time.Now().Add(duration).UnixMilli(), 10)
 }
 
-func (d *DynatraceClient) ListEntities(entitiesType EntitiesType) (EntitiesList, error) {
+func (d *DynatraceClient) ListEntities(entitiesType EntitiesType, timeFromMinutes int, timeToMinutes int) (EntitiesList, error) {
 
 	entityType := entitiesType.EntitiesTypeId
 	log.Debug("Downloading all entities for entities Type %s", entityType)
@@ -784,7 +800,7 @@ func (d *DynatraceClient) ListEntities(entitiesType EntitiesType) (EntitiesList,
 	var ignoreProperties []string
 
 	for runExtraction {
-		params, from, to := genListEntitiesParams(entityType, entitiesType, ignoreProperties)
+		params, from, to := genListEntitiesParams(entityType, entitiesType, timeFromMinutes, timeToMinutes, ignoreProperties)
 		entityList.From = from
 		entityList.To = to
 		resp, err := d.listPaginated(pathEntitiesObjects, params, entityType, addToResult)

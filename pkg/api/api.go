@@ -20,6 +20,8 @@ package api
 type API struct {
 	ID                           string
 	URLPath                      string
+	URLSuffix                    string
+	URLQueryParams               string
 	PropertyNameOfGetAllResponse string
 	// SingleConfiguration are those APIs that configure an environment global setting.
 	// Such settings require additional handling and can't be deleted.

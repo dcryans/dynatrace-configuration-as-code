@@ -17,19 +17,33 @@ package entities
 import (
 	"encoding/json"
 	"path/filepath"
+	"sync"
 
+	"github.com/dynatrace/dynatrace-configuration-as-code/internal/log"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/match"
 	"github.com/spf13/afero"
 )
 
+var mutex = new(sync.Mutex)
+var matchOutputPerType MatchOutputPerType = nil
+
 func LoadMatches(fs afero.Fs, matchParameters match.MatchParameters) (MatchOutputPerType, error) {
+
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	if matchOutputPerType == nil {
+		// pass
+	} else {
+		return matchOutputPerType, nil
+	}
 
 	filesInFolder, err := afero.ReadDir(fs, matchParameters.EntitiesMatchDir)
 	if err != nil {
 		return nil, err
 	}
 
-	matchOutputPerType := MatchOutputPerType{}
+	matchOutputPerType = MatchOutputPerType{}
 
 	for _, file := range filesInFolder {
 		filename := file.Name()
@@ -45,11 +59,42 @@ func LoadMatches(fs afero.Fs, matchParameters match.MatchParameters) (MatchOutpu
 
 		matchOutputType := MatchOutputType{}
 		err = json.Unmarshal(data, &matchOutputType)
-		if err != nil {
-			return nil, err
+
+		entityType := matchOutputType.Type
+
+		if len(matchOutputType.Matches) > 0 {
+			for entityId := range matchOutputType.Matches {
+				entityType = entityId[0:(len(entityId) - 17)]
+				break
+			}
 		}
 
-		matchOutputPerType[matchOutputType.Type] = matchOutputType
+		if err != nil {
+
+			return nil, err
+		}
+		previousMatchOutputType, exists := matchOutputPerType[entityType]
+
+		if exists {
+			for entityIdSource, entityIdTarget := range matchOutputType.Matches {
+				previousIdTarget, exists := previousMatchOutputType.Matches[entityIdSource]
+				if exists {
+					if previousIdTarget == entityIdTarget {
+						// pass
+					} else {
+						log.Error("[LoadMatches] Duplicate Matching for %s, matches with %s and %s", entityIdSource, entityIdTarget, previousIdTarget)
+					}
+				} else {
+					previousMatchOutputType.Matches[entityIdSource] = entityIdTarget
+				}
+			}
+
+			matchOutputPerType[entityType] = previousMatchOutputType
+
+		} else {
+			matchOutputType.Type = entityType
+			matchOutputPerType[entityType] = matchOutputType
+		}
 
 	}
 

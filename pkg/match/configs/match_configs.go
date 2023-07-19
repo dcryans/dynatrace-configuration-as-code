@@ -140,8 +140,20 @@ func MatchConfigs(fs afero.Fs, matchParameters match.MatchParameters, configPerT
 
 	}
 
+	typeDone := map[string]bool{}
+
 	for configsType, configObjectList := range configPerTypeTarget {
 		if len(configObjectList) >= 1 {
+			typeDone[configsType] = true
+			channel <- configTypeInfo{configsType, configObjectList[0].Type}
+		}
+	}
+	for configsType, configObjectList := range configPerTypeSource {
+		if typeDone[configsType] {
+			continue
+		}
+		if len(configObjectList) >= 1 {
+			typeDone[configsType] = true
 			channel <- configTypeInfo{configsType, configObjectList[0].Type}
 		}
 	}

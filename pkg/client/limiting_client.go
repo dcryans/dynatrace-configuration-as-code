@@ -49,6 +49,13 @@ func (l limitingClient) ReadConfigById(a api.API, id string) (json []byte, err e
 
 	return
 }
+func (l limitingClient) ReadConfigByIdSubId(a api.API, id string, subId string) (json []byte, err error) {
+	l.limiter.ExecuteBlocking(func() {
+		json, err = l.client.ReadConfigByIdSubId(a, id, subId)
+	})
+
+	return
+}
 
 func (l limitingClient) UpsertConfigByName(a api.API, name string, payload []byte) (entity DynatraceEntity, err error) {
 	l.limiter.ExecuteBlocking(func() {
@@ -138,9 +145,9 @@ func (l limitingClient) ListEntitiesTypes() (e []EntitiesType, err error) {
 	return
 }
 
-func (l limitingClient) ListEntities(entitiesType EntitiesType) (o EntitiesList, err error) {
+func (l limitingClient) ListEntities(entitiesType EntitiesType, timeFromMinutes int, timeToMinutes int) (o EntitiesList, err error) {
 	l.limiter.ExecuteBlocking(func() {
-		o, err = l.client.ListEntities(entitiesType)
+		o, err = l.client.ListEntities(entitiesType, timeFromMinutes, timeToMinutes)
 	})
 
 	return

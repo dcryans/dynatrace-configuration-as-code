@@ -22,13 +22,15 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/dynatrace-oss/terraform-provider-dynatrace/dynatrace/api"
-	"github.com/dynatrace-oss/terraform-provider-dynatrace/dynatrace/settings/services/cache/tar"
+	//"github.com/dynatrace-oss/terraform-provider-dynatrace/dynatrace/settings/services/cache/tar"
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/log"
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/slices"
 	config "github.com/dynatrace/dynatrace-configuration-as-code/pkg/config/v2"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/match"
+	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/match/configs/tar"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/match/rules"
 	"github.com/spf13/afero"
 )
@@ -447,7 +449,7 @@ func areConfigsIdentical(configProcessingPtr *match.MatchProcessing, sourceI int
 		)
 
 		if areConfigsIdentical {
-			log.Info("Sorting made it equal: %v", configProcessingPtr.GetType())
+			log.Debug("Sorting made it equal: %v", configProcessingPtr.GetType())
 		}
 
 	}
@@ -580,6 +582,10 @@ func writeTarFile(fs afero.Fs, outputDir string, isImport bool, configTypeInfo c
 	if isImport {
 		cacheDir += "_import"
 	}
+
+	startTime := time.Now()
+	log.Debug("Writing cache %s", configTypeInfo.configTypeString)
+
 	tarDir := path.Join(outputDir, cacheDir)
 	sanitizedType := config.Sanitize(configTypeInfo.configTypeString)
 
@@ -598,15 +604,19 @@ func writeTarFile(fs afero.Fs, outputDir string, isImport bool, configTypeInfo c
 		return err
 	}
 
-	for idx, conf := range *values {
+	var getStubData tar.GetStubData = func(idx int) (api.Stub, []byte, bool, error) {
+
+		conf := (*values)[idx]
 
 		if configIdxToWriteSource != nil && !(configIdxToWriteSource[idx]) {
-			continue
+			name, _ := conf.(map[string]interface{})[rules.ConfigNameKey].(string)
+			log.Debug("DO NOT WRITE??: ", name)
+			return api.Stub{}, nil, true, nil
 		}
 
 		bytes, err := json.Marshal(conf)
 		if err != nil {
-			return err
+			return api.Stub{}, nil, false, err
 		}
 
 		configId := replaceConfigs(&conf, &configTypeInfo)
@@ -616,14 +626,21 @@ func writeTarFile(fs afero.Fs, outputDir string, isImport bool, configTypeInfo c
 			name = *configId
 		}
 
-		tarFolder.Save(
-			api.Stub{
-				ID:   *configId,
-				Name: name,
-			},
-			bytes,
-		)
+		stub := api.Stub{
+			ID:   *configId,
+			Name: name,
+		}
+
+		if configTypeInfo.configTypeString == "dashboard" {
+			stub.EntityID = conf.(map[string]interface{})[rules.DownloadedKey].(map[string]interface{})[rules.ValueKey].(map[string]interface{})["dashboardMetadata"].(map[string]interface{})["owner"].(string)
+		}
+
+		return stub, bytes, false, nil
 	}
+
+	tarFolder.SaveAllCallback(len(*values), getStubData)
+
+	log.Debug("Wrote   cache %s in %v", configTypeInfo.configTypeString, time.Since(startTime))
 
 	return nil
 }

@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"reflect"
 	"regexp"
+	"time"
 	"unicode"
 
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/throttle"
@@ -138,9 +139,9 @@ func isInvalidReflectionValue(value reflect.Value) bool {
 	}
 }
 
-func genListEntitiesParams(entityType string, entitiesType EntitiesType, ignoreProperties []string) (url.Values, string, string) {
-	from := genTimeframeUnixMilliString(defaultEntityDurationTimeframeFrom)
-	to := genTimeframeUnixMilliString(defaultEntityDurationTimeframeTo)
+func genListEntitiesParams(entityType string, entitiesType EntitiesType, timeFromMinutes int, timeToMinutes int, ignoreProperties []string) (url.Values, string, string) {
+	from := genTimeframeUnixMilliString(-1 * time.Duration(timeFromMinutes) * time.Minute)
+	to := genTimeframeUnixMilliString(-1 * time.Duration(timeToMinutes) * time.Minute)
 
 	params := url.Values{
 		"entitySelector": []string{"type(\"" + entityType + "\")"},

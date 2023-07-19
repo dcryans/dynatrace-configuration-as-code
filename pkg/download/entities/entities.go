@@ -47,18 +47,18 @@ func NewEntitiesDownloader(c client.EntitiesClient) *Downloader {
 
 // Download downloads all entities objects for the given entities Types
 
-func Download(c client.EntitiesClient, specificEntitiesTypes []string, projectName string) v2.ConfigsPerType {
-	return NewEntitiesDownloader(c).Download(specificEntitiesTypes, projectName)
+func Download(c client.EntitiesClient, specificEntitiesTypes []string, timeFromMinutes int, timeToMinutes int, projectName string) v2.ConfigsPerType {
+	return NewEntitiesDownloader(c).Download(specificEntitiesTypes, timeFromMinutes, timeToMinutes, projectName)
 }
 
 // DownloadAll downloads all entities objects for a given project
-func DownloadAll(c client.EntitiesClient, projectName string) v2.ConfigsPerType {
-	return NewEntitiesDownloader(c).DownloadAll(projectName)
+func DownloadAll(c client.EntitiesClient, timeFromMinutes int, timeToMinutes int, projectName string) v2.ConfigsPerType {
+	return NewEntitiesDownloader(c).DownloadAll(timeFromMinutes, timeToMinutes, projectName)
 }
 
 // Download downloads specific entities objects for the given entities Types and a given project
 // The returned value is a map of entities objects with the entities Type as keys
-func (d *Downloader) Download(specificEntitiesTypes []string, projectName string) v2.ConfigsPerType {
+func (d *Downloader) Download(specificEntitiesTypes []string, timeFromMinutes int, timeToMinutes int, projectName string) v2.ConfigsPerType {
 	if len(specificEntitiesTypes) == 0 {
 		log.Error("No Specific entity type profided for the specific-types option ")
 		return nil
@@ -79,7 +79,7 @@ func (d *Downloader) Download(specificEntitiesTypes []string, projectName string
 		return nil
 	}
 
-	return d.download(filteredEntitiesTypes, projectName)
+	return d.download(filteredEntitiesTypes, timeFromMinutes, timeToMinutes, projectName)
 }
 
 func filterSpecificEntitiesTypes(specificEntitiesTypes []string, entitiesTypes []client.EntitiesType) []client.EntitiesType {
@@ -105,7 +105,7 @@ func filterSpecificEntitiesTypes(specificEntitiesTypes []string, entitiesTypes [
 
 // DownloadAll downloads all entities objects for a given project.
 // The returned value is a map of entities objects with the entities Type as keys
-func (d *Downloader) DownloadAll(projectName string) v2.ConfigsPerType {
+func (d *Downloader) DownloadAll(timeFromMinutes int, timeToMinutes int, projectName string) v2.ConfigsPerType {
 	log.Debug("Fetching all entities types to download")
 
 	// get ALL entities types
@@ -115,10 +115,10 @@ func (d *Downloader) DownloadAll(projectName string) v2.ConfigsPerType {
 		return nil
 	}
 
-	return d.download(entitiesTypes, projectName)
+	return d.download(entitiesTypes, timeFromMinutes, timeToMinutes, projectName)
 }
 
-func (d *Downloader) download(entitiesTypes []client.EntitiesType, projectName string) v2.ConfigsPerType {
+func (d *Downloader) download(entitiesTypes []client.EntitiesType, timeFromMinutes int, timeToMinutes int, projectName string) v2.ConfigsPerType {
 	results := make(v2.ConfigsPerType, len(entitiesTypes))
 	downloadMutex := sync.Mutex{}
 	wg := sync.WaitGroup{}
@@ -129,7 +129,7 @@ func (d *Downloader) download(entitiesTypes []client.EntitiesType, projectName s
 		go func(entityType client.EntitiesType) {
 			defer wg.Done()
 
-			entityList, err := d.client.ListEntities(entityType)
+			entityList, err := d.client.ListEntities(entityType, timeFromMinutes, timeToMinutes)
 			if err != nil {
 				var errMsg string
 				var respErr client.RespError

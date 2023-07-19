@@ -33,6 +33,8 @@ import (
 type entitiesDownloadCommandOptions struct {
 	downloadCommandOptionsShared
 	specificEntitiesTypes []string
+	timeFromMinutes       int
+	timeToMinutes         int
 }
 
 type entitiesManifestDownloadOptions struct {
@@ -49,6 +51,8 @@ type entitiesDirectDownloadOptions struct {
 type downloadEntitiesOptions struct {
 	downloadOptionsShared
 	specificEntitiesTypes []string
+	timeFromMinutes       int
+	timeToMinutes         int
 }
 
 func (d DefaultCommand) DownloadEntitiesBasedOnManifest(fs afero.Fs, cmdOptions entitiesManifestDownloadOptions) error {
@@ -74,6 +78,8 @@ func (d DefaultCommand) DownloadEntitiesBasedOnManifest(fs afero.Fs, cmdOptions 
 			concurrentDownloadLimit: concurrentDownloadLimit,
 		},
 		specificEntitiesTypes: cmdOptions.specificEntitiesTypes,
+		timeFromMinutes:       cmdOptions.timeFromMinutes,
+		timeToMinutes:         cmdOptions.timeToMinutes,
 	}
 
 	dtClient, err := cmdutils.CreateDTClient(env, false)
@@ -107,6 +113,8 @@ func (d DefaultCommand) DownloadEntities(fs afero.Fs, cmdOptions entitiesDirectD
 			concurrentDownloadLimit: concurrentDownloadLimit,
 		},
 		specificEntitiesTypes: cmdOptions.specificEntitiesTypes,
+		timeFromMinutes:       cmdOptions.timeFromMinutes,
+		timeToMinutes:         cmdOptions.timeToMinutes,
 	}
 
 	dtClient, err := client.NewClassicClient(cmdOptions.environmentUrl, token)
@@ -138,9 +146,9 @@ func downloadEntities(dtClient client.Client, opts downloadEntitiesOptions) proj
 	// download specific entity types only
 	if len(opts.specificEntitiesTypes) > 0 {
 		log.Debug("Entity Types to download: \n - %v", strings.Join(opts.specificEntitiesTypes, "\n - "))
-		entitiesObjects = entities.Download(dtClient, opts.specificEntitiesTypes, opts.projectName)
+		entitiesObjects = entities.Download(dtClient, opts.specificEntitiesTypes, opts.timeFromMinutes, opts.timeToMinutes, opts.projectName)
 	} else {
-		entitiesObjects = entities.DownloadAll(dtClient, opts.downloadOptionsShared.projectName)
+		entitiesObjects = entities.DownloadAll(dtClient, opts.timeFromMinutes, opts.timeToMinutes, opts.downloadOptionsShared.projectName)
 	}
 
 	if numEntities := sumConfigs(entitiesObjects); numEntities > 0 {

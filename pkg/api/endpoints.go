@@ -16,6 +16,14 @@
 
 package api
 
+var MobileRemoteProperties = API{
+	ID:                           "application-mobile-user-actions-and-session-properties-remote-properties",
+	URLPath:                      "/api/config/v1/applications/mobile",
+	URLSuffix:                    "userActionAndSessionProperties",
+	PropertyNameOfGetAllResponse: StandardApiPropertyNameOfGetAllResponse,
+	SkipDownload:                 true,
+}
+
 // configEndpoints is map of the http endpoints for configuration API (aka classic/config endpoints).
 var configEndpoints = []API{
 	{
@@ -117,15 +125,39 @@ var configEndpoints = []API{
 		PropertyNameOfGetAllResponse: StandardApiPropertyNameOfGetAllResponse,
 	},
 	{
+		ID:                           "application-web-key-user-actions",
+		URLPath:                      "/api/config/v1/applications/web",
+		URLSuffix:                    "keyUserActions",
+		PropertyNameOfGetAllResponse: StandardApiPropertyNameOfGetAllResponse,
+	},
+	{
+		ID:                           "application-web-error-rules",
+		URLPath:                      "/api/config/v1/applications/web",
+		URLSuffix:                    "errorRules",
+		PropertyNameOfGetAllResponse: StandardApiPropertyNameOfGetAllResponse,
+	},
+	{
 		ID:                           "application-mobile",
 		URLPath:                      "/api/config/v1/applications/mobile",
 		PropertyNameOfGetAllResponse: StandardApiPropertyNameOfGetAllResponse,
 	},
 	{
+		ID:                           "application-mobile-key-user-actions",
+		URLPath:                      "/api/config/v1/applications/mobile",
+		URLSuffix:                    "keyUserActions",
+		PropertyNameOfGetAllResponse: StandardApiPropertyNameOfGetAllResponse,
+	},
+	{
+		ID:                           "application-mobile-user-actions-and-session-properties",
+		URLPath:                      "/api/config/v1/applications/mobile",
+		URLSuffix:                    "userActionAndSessionProperties",
+		PropertyNameOfGetAllResponse: StandardApiPropertyNameOfGetAllResponse,
+	},
+	MobileRemoteProperties,
+	{
 		ID:                           "app-detection-rule",
 		URLPath:                      "/api/config/v1/applicationDetectionRules",
 		PropertyNameOfGetAllResponse: StandardApiPropertyNameOfGetAllResponse,
-		DeprecatedBy:                 "builtin:rum.web.app-detection",
 	},
 	{
 		ID:                           "aws-credentials",
@@ -151,8 +183,8 @@ var configEndpoints = []API{
 	{
 		ID:                           "request-attributes",
 		URLPath:                      "/api/config/v1/service/requestAttributes",
+		URLQueryParams:               "includeProcessGroupReferences=true",
 		PropertyNameOfGetAllResponse: StandardApiPropertyNameOfGetAllResponse,
-		DeprecatedBy:                 "builtin:request-attributes",
 	},
 	{
 		ID:                           "calculated-metrics-service",

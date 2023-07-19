@@ -18,6 +18,7 @@ package classic
 
 import (
 	"encoding/json"
+	"net/url"
 	"sync"
 	"time"
 
@@ -165,8 +166,10 @@ func (d *Downloader) downloadConfigsOfAPI(api api.API, values []client.Value, pr
 	return results
 }
 
-func (d *Downloader) downloadConfigsOfAPIFlat(api api.API, values []client.Value, projectName string) []config.Config {
+func (d *Downloader) downloadConfigsOfAPIFlat(theApi api.API, values []client.Value, projectName string) []config.Config {
 	resultsString := make([]string, 0, len(values))
+	resultsString2 := make([]string, 0, len(values))
+	hasResult2 := false
 	mutex := sync.Mutex{}
 	wg := sync.WaitGroup{}
 	wg.Add(len(values))
@@ -175,11 +178,55 @@ func (d *Downloader) downloadConfigsOfAPIFlat(api api.API, values []client.Value
 		value := value
 		go func() {
 			defer wg.Done()
-			log.Info("Downloading API: %s, Key: %s", api.ID, value.Id)
-			downloadedJsonString, err := d.downloadConfigFlat(api, value)
+			log.Info("Downloading API: %s, Key: %s", theApi.ID, value.Id)
+			downloadedJsonString, err := d.downloadConfigFlat(theApi, value)
 			if err != nil {
-				log.Error("Error fetching config '%v' in api '%v': %v", value.Id, api.ID, err)
+				log.Error("Error fetching config '%v' in api '%v': %v", value.Id, theApi.ID, err)
 				return
+			}
+
+			if theApi.ID == "application-mobile-user-actions-and-session-properties" {
+				presp := struct {
+					Downloaded struct {
+						Value struct {
+							SessionProperties []struct {
+								Key         string `json:"key"`
+								DisplayName string `json:"displayName"`
+							} `json:"sessionProperties"`
+							UserActionProperties []struct {
+								Key         string `json:"key"`
+								DisplayName string `json:"displayName"`
+							} `json:"userActionProperties"`
+						} `json:"value"`
+					} `json:"downloaded"`
+				}{}
+				json.Unmarshal([]byte(downloadedJsonString), &presp)
+
+				propKeys := map[string]string{}
+				for _, v := range presp.Downloaded.Value.SessionProperties {
+					propKeys[v.Key] = v.Key
+				}
+				for _, v := range presp.Downloaded.Value.UserActionProperties {
+					propKeys[v.Key] = v.Key
+				}
+				for propKey := range propKeys {
+					value2 := client.Value{
+						Id:    value.Id,
+						Name:  value.Name,
+						SubId: url.PathEscape(propKey),
+						Owner: value.Owner,
+						Type:  value.Type,
+					}
+					downloadedJsonString2, err := d.downloadConfigFlat(api.MobileRemoteProperties, value2)
+					if err != nil {
+						log.Error("Error fetching config '%v':'%v' in api '%v': %v", value2.Id, value2.SubId, api.MobileRemoteProperties.ID, err)
+						return
+					}
+
+					hasResult2 = true
+					resultsString2 = append(resultsString2, downloadedJsonString2)
+				}
+
 			}
 
 			mutex.Lock()
@@ -190,13 +237,17 @@ func (d *Downloader) downloadConfigsOfAPIFlat(api api.API, values []client.Value
 	}
 	wg.Wait()
 
-	results := d.convertAllObjectsFlat(resultsString, api, projectName)
+	results := d.convertAllObjectsFlat(resultsString, theApi, projectName)
+	if hasResult2 {
+		results2 := d.convertAllObjectsFlat(resultsString2, api.MobileRemoteProperties, projectName)
+		results = append(results, results2...)
+	}
 
 	return results
 }
 
 func (d *Downloader) downloadAndUnmarshalConfig(theApi api.API, value client.Value) (map[string]interface{}, error) {
-	response, err := d.client.ReadConfigById(theApi, value.Id)
+	response, err := d.client.ReadConfigByIdSubId(theApi, value.Id, value.SubId)
 
 	if err != nil {
 		return nil, err
@@ -219,7 +270,16 @@ func (d *Downloader) downloadConfigFlat(theApi api.API, value client.Value) (str
 
 	toSaveDownloaded := make(map[string]interface{}, 3)
 	toSaveDownloaded[ClassicIdKey] = value.Id
+	if value.SubId != "" {
+		toSaveDownloaded[ClassicIdKey] = toSaveDownloaded[ClassicIdKey].(string) + ":" + value.SubId
+	}
 	toSaveDownloaded[URLPathKey] = theApi.URLPath
+	if theApi.URLSuffix != "" {
+		toSaveDownloaded[URLPathKey] = toSaveDownloaded[URLPathKey].(string) + "/%s/" + theApi.URLSuffix
+	}
+	if value.SubId != "" {
+		toSaveDownloaded[URLPathKey] = toSaveDownloaded[URLPathKey].(string) + "/%s"
+	}
 	toSaveDownloaded[rules.ValueKey] = data
 
 	toSaveData := make(map[string]interface{}, 1)

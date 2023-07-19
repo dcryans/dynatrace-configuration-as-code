@@ -158,6 +158,8 @@ func getDownloadEntitiesCommand(fs afero.Fs, command Command, downloadCmd *cobra
 	var project, outputFolder string
 	var forceOverwrite bool
 	var specificEntitiesTypes []string
+	var timeFromMinutes int
+	var timeToMinutes int
 
 	downloadEntitiesCmd := &cobra.Command{
 		Use:   "entities",
@@ -197,6 +199,8 @@ Either downloading based on an existing manifest, or by defining environment URL
 						forceOverwrite: forceOverwrite,
 					},
 					specificEntitiesTypes: specificEntitiesTypes,
+					timeFromMinutes:       timeFromMinutes,
+					timeToMinutes:         timeToMinutes,
 				},
 			}
 			return command.DownloadEntitiesBasedOnManifest(fs, options)
@@ -228,6 +232,8 @@ Either downloading based on an existing manifest, or by defining environment URL
 						forceOverwrite: forceOverwrite,
 					},
 					specificEntitiesTypes: specificEntitiesTypes,
+					timeFromMinutes:       timeFromMinutes,
+					timeToMinutes:         timeToMinutes,
 				},
 			}
 			return command.DownloadEntities(fs, options)
@@ -235,8 +241,8 @@ Either downloading based on an existing manifest, or by defining environment URL
 		},
 	}
 
-	setupSharedEntitiesFlags(manifestDownloadCmd, &project, &outputFolder, &forceOverwrite, &specificEntitiesTypes)
-	setupSharedEntitiesFlags(directDownloadCmd, &project, &outputFolder, &forceOverwrite, &specificEntitiesTypes)
+	setupSharedEntitiesFlags(manifestDownloadCmd, &project, &outputFolder, &forceOverwrite, &specificEntitiesTypes, &timeFromMinutes, &timeToMinutes)
+	setupSharedEntitiesFlags(directDownloadCmd, &project, &outputFolder, &forceOverwrite, &specificEntitiesTypes, &timeFromMinutes, &timeToMinutes)
 
 	downloadEntitiesCmd.AddCommand(manifestDownloadCmd)
 	downloadEntitiesCmd.AddCommand(directDownloadCmd)
@@ -262,9 +268,11 @@ func setupSharedConfigsFlags(cmd *cobra.Command, project, outputFolder *string, 
 	}
 }
 
-func setupSharedEntitiesFlags(cmd *cobra.Command, project, outputFolder *string, forceOverwrite *bool, specificEntitiesTypes *[]string) {
+func setupSharedEntitiesFlags(cmd *cobra.Command, project, outputFolder *string, forceOverwrite *bool, specificEntitiesTypes *[]string, timeFromMinutes *int, timeToMinutes *int) {
 	setupSharedFlags(cmd, project, outputFolder, forceOverwrite)
 	cmd.Flags().StringSliceVarP(specificEntitiesTypes, "specific-types", "s", make([]string, 0), "List of entity type IDs specifying which entity types to download")
+	cmd.Flags().IntVarP(timeFromMinutes, "time-from-minutes", "b", client.DefaultEntityMinutesTimeframeFrom, fmt.Sprintf("How many minutes behind do we want to get entities From, defaults to %d weeks, or %d minutes", client.DefaultEntityWeeksTimeframeFrom, client.DefaultEntityMinutesTimeframeFrom))
+	cmd.Flags().IntVarP(timeToMinutes, "time-to-minutes", "t", client.DefaultEntityMinutesTimeframeTo, fmt.Sprintf("How many minutes behind do we want to get entities To, defaults to %d minutes", client.DefaultEntityMinutesTimeframeTo))
 
 }
 func setupSharedFlags(cmd *cobra.Command, project, outputFolder *string, forceOverwrite *bool) {

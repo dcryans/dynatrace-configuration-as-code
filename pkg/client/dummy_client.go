@@ -104,6 +104,9 @@ func (c *DummyClient) ReadConfigById(a api.API, id string) ([]byte, error) {
 
 	return nil, fmt.Errorf("nothing found for id %s in api %s", id, a.ID)
 }
+func (c *DummyClient) ReadConfigByIdSubId(a api.API, id string, subId string) ([]byte, error) {
+	return c.ReadConfigById(a, id)
+}
 
 func (c *DummyClient) UpsertConfigByName(a api.API, name string, data []byte) (entity DynatraceEntity, err error) {
 	entries, found := c.Entries[a]
@@ -276,6 +279,6 @@ func (c *DummyClient) ListEntitiesTypes() ([]EntitiesType, error) {
 	return make([]EntitiesType, 0), nil
 }
 
-func (c *DummyClient) ListEntities(_ EntitiesType) (EntitiesList, error) {
+func (c *DummyClient) ListEntities(_ EntitiesType, _ int, _ int) (EntitiesList, error) {
 	return EntitiesList{}, nil
 }
