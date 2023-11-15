@@ -41,7 +41,12 @@ func MatchEntities(fs afero.Fs, matchParameters match.MatchParameters, entityPer
 		entitiesTargetCountType := len(entityProcessingPtr.Target.RemainingMatch)
 		entitiesTargetCount += entitiesTargetCountType
 
-		output := runRules(entityProcessingPtr, matchParameters)
+		prevMatches, err := readMatchesPrev(fs, matchParameters, entitiesType)
+		if err != nil {
+			return []string{}, 0, 0, err
+		}
+
+		output := runRules(entityProcessingPtr, matchParameters, prevMatches)
 
 		err = writeMatches(fs, matchParameters, entitiesType, output)
 		if err != nil {

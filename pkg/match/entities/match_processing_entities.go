@@ -15,17 +15,21 @@
 package entities
 
 import (
+	"github.com/dynatrace/dynatrace-configuration-as-code/internal/log"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/match"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/match/rules"
 )
 
-func runRules(entityProcessingPtr *match.MatchProcessing, matchParameters match.MatchParameters) MatchOutputType {
+func runRules(entityProcessingPtr *match.MatchProcessing, matchParameters match.MatchParameters, prevMatches MatchOutputType) MatchOutputType {
 
 	ruleMapGenerator := match.NewIndexRuleMapGenerator(matchParameters.SelfMatch, rules.INDEX_CONFIG_LIST_ENTITIES)
 
 	remainingResultsPtr, matchedEntities := ruleMapGenerator.RunIndexRuleAll(entityProcessingPtr)
 
-	outputPayload := genOutputPayload(entityProcessingPtr, remainingResultsPtr, matchedEntities)
+	outputPayload := genOutputPayload(entityProcessingPtr, remainingResultsPtr, matchedEntities, prevMatches)
+	log.Info("Type: %s -> source count %d and target count %d -> Matched after Prev and FirstSeen: %d",
+		entityProcessingPtr.GetType(), len(*entityProcessingPtr.Source.RawMatchList.GetValues()),
+		len(*entityProcessingPtr.Target.RawMatchList.GetValues()), len(outputPayload.Matches))
 
 	return outputPayload
 

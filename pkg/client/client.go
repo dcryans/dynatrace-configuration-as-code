@@ -142,13 +142,13 @@ const reducedListSettingsFields = "objectId,externalId,schemaVersion,schemaId,sc
 const defaultPageSize = "500"
 const defaultPageSizeEntities = "4000"
 
-const DefaultEntityWeeksTimeframeFrom = 5
-const DefaultEntityMinutesTimeframeFrom = -1 * DefaultEntityWeeksTimeframeFrom * 7 * 24 * 60
+const DefaultEntityWeeksTimeframeFrom = 7
+const DefaultEntityMinutesTimeframeFrom = DefaultEntityWeeksTimeframeFrom * 7 * 24 * 60
 
 // Not extracting the last 10 minutes to make sure what we extract is stable
 // And avoid extracting more entities than the TotalCount from the first page of extraction
 const DefaultEntityMinutesTimeframeTo = 0
-const DefaultEntityDurationTimeframeTo = -1 * DefaultEntityMinutesTimeframeTo * time.Minute
+const DefaultEntityDurationTimeframeTo = DefaultEntityMinutesTimeframeTo * time.Minute
 
 // ListSettingsOptions are additional options for the ListSettings method
 // of the Settings client

@@ -25,26 +25,45 @@ import (
 	"github.com/spf13/afero"
 )
 
-func genMultiMatchedMap(remainingResultsPtr *match.IndexCompareResultList, entityProcessingPtr *match.MatchProcessing) map[string][]string {
+func genMultiMatchedMap(remainingResultsPtr *match.IndexCompareResultList, entityProcessingPtr *match.MatchProcessing, prevMatches MatchOutputType) (map[string][]string, map[string]string) {
+
+	printMultiMatchedSample(remainingResultsPtr, entityProcessingPtr)
 
 	multiMatched := map[string][]string{}
+	matchedByFirstSeen := map[string]string{}
 
 	if len(remainingResultsPtr.CompareResults) <= 0 {
-		return multiMatched
+		return multiMatched, matchedByFirstSeen
 	}
 
 	firstIdx := 0
 	currentId := remainingResultsPtr.CompareResults[0].LeftId
 
 	addMatchingMultiMatched := func(matchCount int) {
+		entityIdSource := (*entityProcessingPtr.Source.RawMatchList.GetValues())[currentId].(map[string]interface{})["entityId"].(string)
+		var bestFirstSeen float64 = 0
+
+		_, foundPrev := prevMatches.Matches[entityIdSource]
+		if foundPrev {
+			return
+		}
+
 		multiMatchedMatches := make([]string, matchCount)
 		for j := 0; j < matchCount; j++ {
 			compareResult := remainingResultsPtr.CompareResults[(j + firstIdx)]
 			targetId := compareResult.RightId
 
-			multiMatchedMatches[j] = (*entityProcessingPtr.Target.RawMatchList.GetValues())[targetId].(map[string]interface{})["entityId"].(string)
+			entityIdTarget := (*entityProcessingPtr.Target.RawMatchList.GetValues())[targetId].(map[string]interface{})["entityId"].(string)
+			firstSeen := (*entityProcessingPtr.Target.RawMatchList.GetValues())[targetId].(map[string]interface{})["firstSeenTms"].(float64)
+
+			if firstSeen > float64(bestFirstSeen) {
+				bestFirstSeen = firstSeen
+				matchedByFirstSeen[entityIdSource] = entityIdTarget
+			}
+
+			multiMatchedMatches[j] = entityIdTarget
 		}
-		multiMatched[(*entityProcessingPtr.Source.RawMatchList.GetValues())[currentId].(map[string]interface{})["entityId"].(string)] = multiMatchedMatches
+		multiMatched[entityIdSource] = multiMatchedMatches
 	}
 
 	for i := 1; i < len(remainingResultsPtr.CompareResults); i++ {
@@ -60,7 +79,32 @@ func genMultiMatchedMap(remainingResultsPtr *match.IndexCompareResultList, entit
 	matchCount := len(remainingResultsPtr.CompareResults) - firstIdx
 	addMatchingMultiMatched(matchCount)
 
-	return multiMatched
+	reverseMatches := map[string]string{}
+	blockedSource := map[string]bool{}
+
+	for entityIdSource, entityIdTarget := range matchedByFirstSeen {
+		entityIdSourceReverse, foundReverse := reverseMatches[entityIdTarget]
+		if foundReverse {
+			blockedSource[entityIdSourceReverse] = true
+			blockedSource[entityIdSource] = true
+			continue
+		}
+
+		reverseMatches[entityIdTarget] = entityIdSource
+	}
+
+	matchedByFirstSeenFinal := map[string]string{}
+	for entityIdSource, entityIdTarget := range matchedByFirstSeen {
+		blocked, found := blockedSource[entityIdSource]
+		if found {
+			if blocked {
+				continue
+			}
+		}
+		matchedByFirstSeenFinal[entityIdSource] = entityIdTarget
+	}
+
+	return multiMatched, matchedByFirstSeenFinal
 
 }
 
@@ -87,13 +131,6 @@ func printMultiMatchedSample(remainingResultsPtr *match.IndexCompareResultList, 
 
 }
 
-func getMultiMatched(remainingResultsPtr *match.IndexCompareResultList, entityProcessingPtr *match.MatchProcessing) map[string][]string {
-	printMultiMatchedSample(remainingResultsPtr, entityProcessingPtr)
-
-	return genMultiMatchedMap(remainingResultsPtr, entityProcessingPtr)
-
-}
-
 type MatchOutputPerType map[string]MatchOutputType
 
 type MatchOutputType struct {
@@ -114,9 +151,9 @@ type ExtractionInfo struct {
 	To   string `json:"to"`
 }
 
-func genOutputPayload(entityProcessingPtr *match.MatchProcessing, remainingResultsPtr *match.IndexCompareResultList, matchedEntities *map[int]int) MatchOutputType {
+func genOutputPayload(entityProcessingPtr *match.MatchProcessing, remainingResultsPtr *match.IndexCompareResultList, matchedEntities *map[int]int, prevMatches MatchOutputType) MatchOutputType {
 
-	multiMatchedMap := getMultiMatched(remainingResultsPtr, entityProcessingPtr)
+	multiMatchedMap, matchedByFirstSeen := genMultiMatchedMap(remainingResultsPtr, entityProcessingPtr, prevMatches)
 	entityProcessingPtr.PrepareRemainingMatch(false, true, remainingResultsPtr)
 
 	matchOutput := MatchOutputType{
@@ -133,19 +170,108 @@ func genOutputPayload(entityProcessingPtr *match.MatchProcessing, remainingResul
 		},
 		Matches:      make(map[string]string, len(*matchedEntities)),
 		MultiMatched: multiMatchedMap,
-		UnMatched:    make([]string, len(*entityProcessingPtr.Source.CurrentRemainingMatch)),
+		UnMatched:    make([]string, 0, len(*entityProcessingPtr.Source.CurrentRemainingMatch)),
 	}
 
+	reverseMatches := map[string]string{}
+
+	var isAlreadyMatched = func(entityIdSource string, entityIdTarget string) bool {
+
+		_, foundId := matchOutput.Matches[entityIdSource]
+
+		if foundId {
+			return true
+		}
+
+		_, foundReverse := reverseMatches[entityIdTarget]
+		if foundReverse {
+			return true
+		}
+
+		reverseMatches[entityIdTarget] = entityIdSource
+
+		return false
+	}
+
+	// First, current perfect matches
 	for sourceI, targetI := range *matchedEntities {
-		matchOutput.Matches[(*entityProcessingPtr.Source.RawMatchList.GetValues())[sourceI].(map[string]interface{})["entityId"].(string)] =
-			(*entityProcessingPtr.Target.RawMatchList.GetValues())[targetI].(map[string]interface{})["entityId"].(string)
+		entityIdSource := (*entityProcessingPtr.Source.RawMatchList.GetValues())[sourceI].(map[string]interface{})["entityId"].(string)
+		entityIdTarget := (*entityProcessingPtr.Target.RawMatchList.GetValues())[targetI].(map[string]interface{})["entityId"].(string)
+
+		if isAlreadyMatched(entityIdSource, entityIdTarget) {
+			continue
+		}
+
+		matchOutput.Matches[entityIdSource] = entityIdTarget
+
 	}
 
-	for idx, sourceI := range *entityProcessingPtr.Source.CurrentRemainingMatch {
-		matchOutput.UnMatched[idx] = (*entityProcessingPtr.Source.RawMatchList.GetValues())[sourceI].(map[string]interface{})["entityId"].(string)
+	// Then, previously matched
+	for entityIdSourcePrev, entityIdTargetPrev := range prevMatches.Matches {
+		if isAlreadyMatched(entityIdSourcePrev, entityIdTargetPrev) {
+			continue
+		}
+
+		matchOutput.Matches[entityIdSourcePrev] = entityIdTargetPrev
+	}
+
+	// Last, matched using most recent first seen date
+	for entityIdSourceFirstSeen, entityIdTargetFirstSeen := range matchedByFirstSeen {
+		if isAlreadyMatched(entityIdSourceFirstSeen, entityIdTargetFirstSeen) {
+			continue
+		}
+
+		matchOutput.Matches[entityIdSourceFirstSeen] = entityIdTargetFirstSeen
+	}
+
+	for _, sourceI := range *entityProcessingPtr.Source.CurrentRemainingMatch {
+		entityIdSource := (*entityProcessingPtr.Source.RawMatchList.GetValues())[sourceI].(map[string]interface{})["entityId"].(string)
+
+		_, foundPrev := prevMatches.Matches[entityIdSource]
+		if foundPrev {
+			continue
+		}
+
+		matchOutput.UnMatched = append(matchOutput.UnMatched, entityIdSource)
 	}
 
 	return matchOutput
+}
+
+func readMatchesPrev(fs afero.Fs, matchParameters match.MatchParameters, entitiesType string) (MatchOutputType, error) {
+
+	if matchParameters.PrevResultDir == "" {
+		return MatchOutputType{}, nil
+	}
+
+	sanitizedPrevResultDir := filepath.Clean(matchParameters.PrevResultDir)
+
+	_, err := afero.Exists(fs, sanitizedPrevResultDir)
+	if err != nil {
+		return MatchOutputType{}, nil
+	}
+
+	sanitizedType := config.Sanitize(entitiesType)
+	fullMatchPathPrev := filepath.Join(sanitizedPrevResultDir, fmt.Sprintf("%s.json", sanitizedType))
+
+	data, err := afero.ReadFile(fs, fullMatchPathPrev)
+	if err != nil {
+		return MatchOutputType{}, nil
+	}
+
+	if len(data) == 0 {
+		return MatchOutputType{}, fmt.Errorf("file `%s` is empty", fullMatchPathPrev)
+	}
+
+	var prevResult MatchOutputType
+
+	err = json.Unmarshal(data, &prevResult)
+	if err != nil {
+		return MatchOutputType{}, err
+	}
+
+	return prevResult, nil
+
 }
 
 func writeMatches(fs afero.Fs, matchParameters match.MatchParameters, entitiesType string, output MatchOutputType) error {

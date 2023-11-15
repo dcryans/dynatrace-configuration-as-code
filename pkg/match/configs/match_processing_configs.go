@@ -19,13 +19,13 @@ import (
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/match/rules"
 )
 
-func runRules(configProcessingPtr *match.MatchProcessing, matchParameters match.MatchParameters, configsTypeInfo configTypeInfo) (MatchOutputType, Module, []bool, error) {
+func runRules(configProcessingPtr *match.MatchProcessing, matchParameters match.MatchParameters, configsTypeInfo configTypeInfo, prevMatches MatchOutputType) (MatchOutputType, Module, []bool, error) {
 
 	ruleMapGenerator := match.NewIndexRuleMapGenerator(matchParameters.SelfMatch, rules.INDEX_CONFIG_LIST_CONFIGS)
 
 	remainingResultsPtr, matchedConfigs := ruleMapGenerator.RunIndexRuleAll(configProcessingPtr)
 
-	outputPayload, matchEntityMatches, configIdxToWriteSource, err := genOutputPayload(matchParameters, configProcessingPtr, remainingResultsPtr, matchedConfigs, configsTypeInfo)
+	outputPayload, matchEntityMatches, configIdxToWriteSource, err := genOutputPayload(matchParameters, configProcessingPtr, remainingResultsPtr, matchedConfigs, configsTypeInfo, prevMatches)
 
 	return outputPayload, matchEntityMatches, configIdxToWriteSource, err
 

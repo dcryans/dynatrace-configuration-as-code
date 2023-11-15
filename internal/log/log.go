@@ -18,11 +18,12 @@ package log
 
 import (
 	"fmt"
-	"github.com/spf13/afero"
 	"log"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/spf13/afero"
 )
 
 const logsDir = ".logs"
@@ -151,13 +152,22 @@ func SetupLogging(fs afero.Fs, optionalAddedLogger *log.Logger) {
 }
 
 func setupFileLogging(fs afero.Fs) error {
-	timestamp := time.Now().Format("20060102-150405")
 
-	if err := fs.MkdirAll(logsDir, 0777); err != nil {
-		return fmt.Errorf("failed to create directory %s: %w", logsDir, err)
+	logFilePath := ""
+
+	restLogFileName := os.Getenv("MONACO_LOG_PATH")
+	if len(restLogFileName) > 0 && restLogFileName != "false" {
+		logFilePath = restLogFileName
+	} else {
+
+		timestamp := time.Now().Format("20060102-150405")
+		if err := fs.MkdirAll(logsDir, 0777); err != nil {
+			return fmt.Errorf("failed to create directory %s: %w", logsDir, err)
+		}
+
+		logFilePath = filepath.Join(logsDir, timestamp+".log")
 	}
 
-	logFilePath := filepath.Join(logsDir, timestamp+".log")
 	logFile, err := fs.OpenFile(logFilePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
 		return fmt.Errorf("unable to open file '%s' for logging: %w", logFilePath, err)

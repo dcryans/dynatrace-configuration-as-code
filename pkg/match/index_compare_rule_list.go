@@ -170,7 +170,7 @@ func (i *IndexCompareResultList) getUniqueMatchItems() []CompareResult {
 	return uniqueMatchItems
 }
 
-func (i *IndexCompareResultList) sumMatchWeightValues(splitMatch bool, maxMatchValue int) {
+func (i *IndexCompareResultList) sumMatchWeightValues(splitMatch bool, maxMatchValue int, doPostProcess bool) {
 
 	if len(i.CompareResults) <= 1 {
 		return
@@ -189,7 +189,11 @@ func (i *IndexCompareResultList) sumMatchWeightValues(splitMatch bool, maxMatchV
 			return
 		}
 
-		keepRecord := i.postProcess(&prevTotal)
+		keepRecord := true
+
+		if doPostProcess {
+			keepRecord = i.postProcess(&prevTotal)
+		}
 
 		if keepRecord {
 			summedMatchResults = append(summedMatchResults, prevTotal)
@@ -220,24 +224,12 @@ func (i *IndexCompareResultList) sumMatchWeightValues(splitMatch bool, maxMatchV
 func (i *IndexCompareResultList) postProcess(prevTotal *CompareResult) bool {
 	keepRecord := true
 
-	for idx, postProcess := range i.PostProcessList {
-		leftDoneMap, ok := postProcess.Done[prevTotal.LeftId]
-		if ok {
-			isDone, ok := leftDoneMap[prevTotal.RightId]
-			if ok && isDone {
-				continue
-			}
-		} else {
-			i.PostProcessList[idx].Done[prevTotal.LeftId] = map[int]bool{}
-		}
-
+	for _, postProcess := range i.PostProcessList {
 		if postProcess.LeftMap[prevTotal.LeftId] && postProcess.RightMap[prevTotal.RightId] {
 			prevTotal.Weight += postProcess.Rule.WeightValue
 		} else if postProcess.RuleType.SplitMatch {
 			keepRecord = false
 		}
-
-		i.PostProcessList[idx].Done[prevTotal.LeftId][prevTotal.RightId] = true
 	}
 
 	return keepRecord
@@ -305,26 +297,26 @@ func (i *IndexCompareResultList) trimUniqueMatches(uniqueMatchItems []CompareRes
 
 }
 
+func (i *IndexCompareResultList) MergeRemainingWeightType(remainingResults *IndexCompareResultList) {
+	i.sumMatchWeightValues(false, 0, false)
+	lowerMaxWeight := i.getMaxWeight()
+	remainingResults.elevateWeight(lowerMaxWeight)
+
+	i.CompareResults = append(i.CompareResults, remainingResults.CompareResults...)
+	i.sort()
+}
+
 func (i *IndexCompareResultList) ProcessMatches(splitMatch bool, maxMatchValue int) []CompareResult {
 
 	if len(i.CompareResults) == 0 {
 		return []CompareResult{}
 	}
 
-	i.sumMatchWeightValues(splitMatch, maxMatchValue)
+	i.sumMatchWeightValues(splitMatch, maxMatchValue, true)
 	uniqueTopMatches := extractUniqueTopMatch(i)
 
 	i.trimUniqueMatches(uniqueTopMatches)
 
 	return uniqueTopMatches
 
-}
-
-func (i *IndexCompareResultList) MergeRemainingWeightType(remainingResults *IndexCompareResultList) {
-	i.sumMatchWeightValues(false, 0)
-	lowerMaxWeight := i.getMaxWeight()
-	remainingResults.elevateWeight(lowerMaxWeight)
-
-	i.CompareResults = append(i.CompareResults, remainingResults.CompareResults...)
-	i.sort()
 }

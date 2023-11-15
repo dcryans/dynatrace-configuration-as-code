@@ -35,7 +35,9 @@ import (
 	"github.com/spf13/afero"
 )
 
-func genMultiMatchedMap(matchParameters match.MatchParameters, remainingResultsPtr *match.IndexCompareResultList, configProcessingPtr *match.MatchProcessing, configsTypeInfo configTypeInfo, configIdxToWriteSource *[]bool) (map[string][]string, MatchStatus, Module, error) {
+func genMultiMatchedMap(matchParameters match.MatchParameters, remainingResultsPtr *match.IndexCompareResultList, configProcessingPtr *match.MatchProcessing, configsTypeInfo configTypeInfo, configIdxToWriteSource *[]bool, prevMatches MatchOutputType) (map[string][]string, MatchStatus, Module, error) {
+
+	printMultiMatchedSample(remainingResultsPtr, configProcessingPtr)
 
 	matchEntityMatches := Module{
 		"schemaId": configsTypeInfo.configTypeString,
@@ -63,6 +65,13 @@ func genMultiMatchedMap(matchParameters match.MatchParameters, remainingResultsP
 	currentSourceId := remainingResultsPtr.CompareResults[0].LeftId
 
 	addMatchingMultiMatched := func(matchCount int) error {
+		configIdSource := (*configProcessingPtr.Source.RawMatchList.GetValues())[currentSourceId].(map[string]interface{})[rules.ConfigIdKey].(string)
+
+		_, foundPrev := prevMatches.Matches[configIdSource]
+		if foundPrev {
+			return nil
+		}
+
 		multiMatchedMatches := make([]string, matchCount)
 		for j := 0; j < matchCount; j++ {
 			compareResult := remainingResultsPtr.CompareResults[(j + firstIdx)]
@@ -93,7 +102,7 @@ func genMultiMatchedMap(matchParameters match.MatchParameters, remainingResultsP
 		}
 		matchStatus.Source.actionStatus[currentSourceId] = match.ACTION_UPDATE_RUNE
 		matchStatus.Source.errorStatus[currentSourceId] = match.STATUS_MULTI_MATCH_RUNE
-		multiMatched[(*configProcessingPtr.Source.RawMatchList.GetValues())[currentSourceId].(map[string]interface{})[rules.ConfigIdKey].(string)] = multiMatchedMatches
+		multiMatched[configIdSource] = multiMatchedMatches
 
 		return nil
 	}
@@ -228,13 +237,6 @@ func printMultiMatchedSample(remainingResultsPtr *match.IndexCompareResultList, 
 
 }
 
-func getMultiMatched(matchParameters match.MatchParameters, remainingResultsPtr *match.IndexCompareResultList, configProcessingPtr *match.MatchProcessing, configsTypeInfo configTypeInfo, configIdxToWriteSource *[]bool) (map[string][]string, MatchStatus, Module, error) {
-	printMultiMatchedSample(remainingResultsPtr, configProcessingPtr)
-
-	return genMultiMatchedMap(matchParameters, remainingResultsPtr, configProcessingPtr, configsTypeInfo, configIdxToWriteSource)
-
-}
-
 type MatchOutputType struct {
 	Type         string              `json:"type"`
 	MatchKey     MatchKey            `json:"matchKey"`
@@ -287,11 +289,11 @@ type ConfigResultParam struct {
 
 const allConfigEntity = "all_configs"
 
-func genOutputPayload(matchParameters match.MatchParameters, configProcessingPtr *match.MatchProcessing, remainingResultsPtr *match.IndexCompareResultList, matchedConfigs *map[int]int, configsTypeInfo configTypeInfo) (MatchOutputType, Module, []bool, error) {
+func genOutputPayload(matchParameters match.MatchParameters, configProcessingPtr *match.MatchProcessing, remainingResultsPtr *match.IndexCompareResultList, matchedConfigs *map[int]int, configsTypeInfo configTypeInfo, prevMatches MatchOutputType) (MatchOutputType, Module, []bool, error) {
 
 	configIdxToWriteSource := make([]bool, len(*configProcessingPtr.Source.RawMatchList.GetValues()))
 
-	multiMatchedMap, matchStatus, matchEntityMatches, err := getMultiMatched(matchParameters, remainingResultsPtr, configProcessingPtr, configsTypeInfo, &configIdxToWriteSource)
+	multiMatchedMap, matchStatus, matchEntityMatches, err := genMultiMatchedMap(matchParameters, remainingResultsPtr, configProcessingPtr, configsTypeInfo, &configIdxToWriteSource, prevMatches)
 	if err != nil {
 		return MatchOutputType{}, Module{}, nil, err
 	}
@@ -313,7 +315,7 @@ func genOutputPayload(matchParameters match.MatchParameters, configProcessingPtr
 		},
 		Matches:      make(map[string]string, len(*matchedConfigs)),
 		MultiMatched: multiMatchedMap,
-		UnMatched:    make([]string, len(*configProcessingPtr.Source.CurrentRemainingMatch)),
+		UnMatched:    make([]string, 0, len(*configProcessingPtr.Source.CurrentRemainingMatch)),
 		Exceed:       make([]string, len(*configProcessingPtr.Target.CurrentRemainingMatch)),
 	}
 
@@ -343,6 +345,16 @@ func genOutputPayload(matchParameters match.MatchParameters, configProcessingPtr
 			(*configProcessingPtr.Target.RawMatchList.GetValues())[targetI].(map[string]interface{})[rules.ConfigIdKey].(string)
 	}
 
+	for configSourceIdPrev, configTargetIdPrev := range prevMatches.Matches {
+		_, foundId := matchOutput.Matches[configSourceIdPrev]
+
+		if foundId {
+			continue
+		}
+
+		matchOutput.Matches[configSourceIdPrev] = configTargetIdPrev
+	}
+
 	for _, result := range updateConfigResultParamList {
 		err = addConfigResult(matchParameters, configProcessingPtr, &matchEntityMatches, &configIdxToWriteSource, result)
 		if err != nil {
@@ -350,7 +362,14 @@ func genOutputPayload(matchParameters match.MatchParameters, configProcessingPtr
 		}
 	}
 
-	for idx, sourceI := range *configProcessingPtr.Source.CurrentRemainingMatch {
+	for _, sourceI := range *configProcessingPtr.Source.CurrentRemainingMatch {
+		configIdSource := (*configProcessingPtr.Source.RawMatchList.GetValues())[sourceI].(map[string]interface{})[rules.ConfigIdKey].(string)
+
+		_, foundPrev := prevMatches.Matches[configIdSource]
+		if foundPrev {
+			continue
+		}
+
 		actionStatus := match.ACTION_ADD_RUNE
 		matchStatus.Source.actionStatus[sourceI] = actionStatus
 
@@ -358,7 +377,7 @@ func genOutputPayload(matchParameters match.MatchParameters, configProcessingPtr
 		if err != nil {
 			return MatchOutputType{}, Module{}, nil, err
 		}
-		matchOutput.UnMatched[idx] = (*configProcessingPtr.Source.RawMatchList.GetValues())[sourceI].(map[string]interface{})[rules.ConfigIdKey].(string)
+		matchOutput.UnMatched = append(matchOutput.UnMatched, configIdSource)
 	}
 
 	for idx, targetI := range *configProcessingPtr.Target.CurrentRemainingMatch {
@@ -561,6 +580,42 @@ func getItemKey(item map[string]interface{}, itemKey string) (string, map[string
 	return itemKey, item
 }
 
+func readMatchesPrev(fs afero.Fs, matchParameters match.MatchParameters, configType string) (MatchOutputType, error) {
+
+	if matchParameters.PrevResultDir == "" {
+		return MatchOutputType{}, nil
+	}
+
+	sanitizedPrevResultDir := filepath.Clean(matchParameters.PrevResultDir)
+
+	_, err := afero.Exists(fs, sanitizedPrevResultDir)
+	if err != nil {
+		return MatchOutputType{}, nil
+	}
+
+	sanitizedType := config.Sanitize(configType)
+	fullMatchPathPrev := filepath.Join(sanitizedPrevResultDir, fmt.Sprintf("%s.json", sanitizedType))
+
+	data, err := afero.ReadFile(fs, fullMatchPathPrev)
+	if err != nil {
+		return MatchOutputType{}, nil
+	}
+
+	if len(data) == 0 {
+		return MatchOutputType{}, fmt.Errorf("file `%s` is empty", fullMatchPathPrev)
+	}
+
+	var prevResult MatchOutputType
+
+	err = json.Unmarshal(data, &prevResult)
+	if err != nil {
+		return MatchOutputType{}, err
+	}
+
+	return prevResult, nil
+
+}
+
 func writeMatches(fs afero.Fs, configProcessingPtr *match.MatchProcessing, matchParameters match.MatchParameters, configTypeInfo configTypeInfo, configMatches MatchOutputType, configIdxToWriteSource []bool) error {
 	sanitizedType := config.Sanitize(configTypeInfo.configTypeString)
 	err := writeJsonMatchFile(fs, matchParameters.OutputDir, "dict", sanitizedType, configMatches)
@@ -633,6 +688,7 @@ func writeTarFile(fs afero.Fs, outputDir string, isImport bool, configTypeInfo c
 
 		if configTypeInfo.configTypeString == "dashboard" {
 			stub.EntityID = conf.(map[string]interface{})[rules.DownloadedKey].(map[string]interface{})[rules.ValueKey].(map[string]interface{})["dashboardMetadata"].(map[string]interface{})["owner"].(string)
+			stub.Name = conf.(map[string]interface{})[rules.DownloadedKey].(map[string]interface{})[rules.ValueKey].(map[string]interface{})["dashboardMetadata"].(map[string]interface{})["name"].(string)
 		}
 
 		return stub, bytes, false, nil

@@ -132,6 +132,7 @@ func doDownloadEntities(fs afero.Fs, dtClient client.Client, opts downloadEntiti
 	}
 
 	log.Info("Downloading from environment '%v' into project '%v'", opts.environmentUrl, opts.projectName)
+	log.Info("Time from minutes: %v, Time to minutes: %v", opts.timeFromMinutes, opts.timeToMinutes)
 
 	downloadedConfigs := downloadEntities(dtClient, opts)
 

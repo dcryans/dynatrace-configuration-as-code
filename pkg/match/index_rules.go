@@ -130,6 +130,7 @@ func (i *IndexRuleMapGenerator) RunIndexRuleAll(matchProcessingPtr *MatchProcess
 		}
 
 		resultListPtr.MergeRemainingWeightType(remainingResultsPtr)
+
 		uniqueMatchEntities := resultListPtr.ProcessMatches(indexRuleType.SplitMatch, maxMatchValue)
 		remainingResultsPtr = resultListPtr
 

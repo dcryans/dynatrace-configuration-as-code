@@ -52,6 +52,13 @@ var configEndpoints = []API{
 		NonUniqueName:                true,
 	},
 	{
+		ID:                           "dashboard-sharing",
+		URLPath:                      "/api/config/v1/dashboards",
+		URLSuffix:                    "shareSettings",
+		PropertyNameOfGetAllResponse: "dashboards",
+		NonUniqueName:                true,
+	},
+	{
 		ID:                           "notification",
 		URLPath:                      "/api/config/v1/notifications",
 		PropertyNameOfGetAllResponse: StandardApiPropertyNameOfGetAllResponse,
@@ -110,7 +117,7 @@ var configEndpoints = []API{
 	// Environment API not Config API
 	{
 		ID:                           "synthetic-location",
-		URLPath:                      "/api/v1/synthetic/locations",
+		URLPath:                      "/api/v1/synthetic/locations?type=PRIVATE",
 		PropertyNameOfGetAllResponse: StandardApiPropertyNameOfGetAllResponse,
 	},
 	// Environment API not Config API

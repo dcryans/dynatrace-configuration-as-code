@@ -96,7 +96,12 @@ func MatchConfigs(fs afero.Fs, matchParameters match.MatchParameters, configPerT
 		configsSourceCountType := len(configProcessingPtr.Source.RemainingMatch)
 		configsTargetCountType := len(configProcessingPtr.Target.RemainingMatch)
 
-		configMatches, matchEntityMatches, configIdxToWriteSource, err := runRules(configProcessingPtr, matchParameters, configTypeInfo)
+		prevMatches, err := readMatchesPrev(fs, matchParameters, configTypeInfo.configTypeString)
+		if err != nil {
+			return
+		}
+
+		configMatches, matchEntityMatches, configIdxToWriteSource, err := runRules(configProcessingPtr, matchParameters, configTypeInfo, prevMatches)
 		if err != nil {
 			mutex.Lock()
 			errs = append(errs, fmt.Errorf("failed to run rules for type: %s, see error: %w", configTypeInfo.configTypeString, err))

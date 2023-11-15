@@ -103,7 +103,7 @@ var configEndpointsV1 = []API{
 	},
 	{
 		ID:                           "synthetic-location",
-		URLPath:                      "/api/v1/synthetic/locations",
+		URLPath:                      "/api/v1/synthetic/locations?type=PRIVATE",
 		PropertyNameOfGetAllResponse: StandardApiPropertyNameOfGetAllResponse,
 	},
 	{
