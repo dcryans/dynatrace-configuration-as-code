@@ -25,7 +25,7 @@ import (
 	"github.com/spf13/afero"
 )
 
-func genMultiMatchedMap(remainingResultsPtr *match.IndexCompareResultList, entityProcessingPtr *match.MatchProcessing, prevMatches MatchOutputType) (map[string][]string, map[string]string) {
+func genMultiMatchedMap(remainingResultsPtr *match.CompareResultList, entityProcessingPtr *match.MatchProcessing, prevMatches MatchOutputType) (map[string][]string, map[string]string) {
 
 	printMultiMatchedSample(remainingResultsPtr, entityProcessingPtr)
 
@@ -108,7 +108,7 @@ func genMultiMatchedMap(remainingResultsPtr *match.IndexCompareResultList, entit
 
 }
 
-func printMultiMatchedSample(remainingResultsPtr *match.IndexCompareResultList, entityProcessingPtr *match.MatchProcessing) {
+func printMultiMatchedSample(remainingResultsPtr *match.CompareResultList, entityProcessingPtr *match.MatchProcessing) {
 	multiMatchedCount := len(remainingResultsPtr.CompareResults)
 
 	if multiMatchedCount <= 0 {
@@ -134,11 +134,13 @@ func printMultiMatchedSample(remainingResultsPtr *match.IndexCompareResultList, 
 type MatchOutputPerType map[string]MatchOutputType
 
 type MatchOutputType struct {
-	Type         string              `json:"type"`
-	MatchKey     MatchKey            `json:"matchKey"`
-	Matches      map[string]string   `json:"matches"`
-	MultiMatched map[string][]string `json:"multiMatched"`
-	UnMatched    []string            `json:"unmatched"`
+	Type              string                        `json:"type"`
+	MatchKey          MatchKey                      `json:"matchKey"`
+	Matches           map[string]string             `json:"matches"`
+	MultiMatched      map[string][]string           `json:"multiMatched"`
+	UnMatched         []string                      `json:"unmatched"`
+	PostProcessSource map[string]*PostProcessOutput `json:"postProcessSource"`
+	PostProcessTarget map[string]*PostProcessOutput `json:"postProcessTarget"`
 }
 
 type MatchKey struct {
@@ -151,7 +153,21 @@ type ExtractionInfo struct {
 	To   string `json:"to"`
 }
 
-func genOutputPayload(entityProcessingPtr *match.MatchProcessing, remainingResultsPtr *match.IndexCompareResultList, matchedEntities *map[int]int, prevMatches MatchOutputType) MatchOutputType {
+type PostProcessOutput struct {
+	IndexValues []string `json:"indexValues"`
+	TotalWeight int      `json:"totalWeight"`
+	IDs         []string
+}
+
+func (me *MatchOutputType) calcMultiMatched() int {
+	multiMatched := len(me.MultiMatched)
+	for _, postProcess := range me.PostProcessSource {
+		multiMatched += len(postProcess.IDs)
+	}
+
+	return multiMatched
+}
+func genOutputPayload(entityProcessingPtr *match.MatchProcessing, remainingResultsPtr *match.CompareResultList, matchedEntities *map[int]int, prevMatches MatchOutputType) MatchOutputType {
 
 	multiMatchedMap, matchedByFirstSeen := genMultiMatchedMap(remainingResultsPtr, entityProcessingPtr, prevMatches)
 	entityProcessingPtr.PrepareRemainingMatch(false, true, remainingResultsPtr)
@@ -168,9 +184,11 @@ func genOutputPayload(entityProcessingPtr *match.MatchProcessing, remainingResul
 				To:   (*entityProcessingPtr).Target.ConfigType.(config.EntityType).To,
 			},
 		},
-		Matches:      make(map[string]string, len(*matchedEntities)),
-		MultiMatched: multiMatchedMap,
-		UnMatched:    make([]string, 0, len(*entityProcessingPtr.Source.CurrentRemainingMatch)),
+		Matches:           make(map[string]string, len(*matchedEntities)),
+		MultiMatched:      multiMatchedMap,
+		UnMatched:         make([]string, 0, len(*entityProcessingPtr.Source.CurrentRemainingMatch)),
+		PostProcessSource: map[string]*PostProcessOutput{},
+		PostProcessTarget: map[string]*PostProcessOutput{},
 	}
 
 	reverseMatches := map[string]string{}
@@ -213,6 +231,11 @@ func genOutputPayload(entityProcessingPtr *match.MatchProcessing, remainingResul
 		}
 
 		matchOutput.Matches[entityIdSourcePrev] = entityIdTargetPrev
+
+		_, found := matchOutput.MultiMatched[entityIdSourcePrev]
+		if found {
+			delete(matchOutput.MultiMatched, entityIdSourcePrev)
+		}
 	}
 
 	// Last, matched using most recent first seen date
@@ -222,6 +245,15 @@ func genOutputPayload(entityProcessingPtr *match.MatchProcessing, remainingResul
 		}
 
 		matchOutput.Matches[entityIdSourceFirstSeen] = entityIdTargetFirstSeen
+
+		_, found := matchOutput.MultiMatched[entityIdSourceFirstSeen]
+		if found {
+			delete(matchOutput.MultiMatched, entityIdSourceFirstSeen)
+		}
+	}
+
+	isInLeftMap := func(postProcess match.PostProcess, entityIdx int) bool {
+		return postProcess.LeftMap[entityIdx]
 	}
 
 	for _, sourceI := range *entityProcessingPtr.Source.CurrentRemainingMatch {
@@ -232,10 +264,69 @@ func genOutputPayload(entityProcessingPtr *match.MatchProcessing, remainingResul
 			continue
 		}
 
+		hasPostProcessData := handlePostProcess(remainingResultsPtr, &matchOutput.PostProcessSource, sourceI, entityIdSource, isInLeftMap)
+
+		if hasPostProcessData {
+			continue
+		}
+
 		matchOutput.UnMatched = append(matchOutput.UnMatched, entityIdSource)
 	}
 
+	isInRightMap := func(postProcess match.PostProcess, entityIdx int) bool {
+		return postProcess.RightMap[entityIdx]
+	}
+
+	for _, targetI := range *entityProcessingPtr.Target.CurrentRemainingMatch {
+		entityIdTarget := (*entityProcessingPtr.Target.RawMatchList.GetValues())[targetI].(map[string]interface{})["entityId"].(string)
+
+		handlePostProcess(remainingResultsPtr, &matchOutput.PostProcessTarget, targetI, entityIdTarget, isInRightMap)
+	}
+
 	return matchOutput
+}
+
+func handlePostProcess(remainingResultsPtr *match.CompareResultList, postProcessOutput *map[string]*PostProcessOutput, entityIdx int, entityId string, isInMap func(match.PostProcess, int) bool) bool {
+	postProcessIdxList := []int{}
+	postProcessId := ""
+	for postProcessIdx, postProcess := range remainingResultsPtr.PostProcessList {
+		if isInMap(postProcess, entityIdx) {
+			postProcessIdxList = append(postProcessIdxList, postProcessIdx)
+			if postProcessId != "" {
+				postProcessId += "|"
+			}
+			postProcessId += fmt.Sprint(postProcessIdx)
+		}
+	}
+
+	hasPostProcessData := len(postProcessIdxList) > 0
+
+	if hasPostProcessData {
+		postProcessOutputLocal, postProcessFound := (*postProcessOutput)[postProcessId]
+
+		if postProcessFound {
+			// pass
+		} else {
+			postProcessOutputLocal = &PostProcessOutput{
+				IndexValues: []string{},
+				TotalWeight: 0,
+				IDs:         []string{},
+			}
+
+			for _, postProcessIdx := range postProcessIdxList {
+				postProcess := remainingResultsPtr.PostProcessList[postProcessIdx]
+				postProcessOutputLocal.TotalWeight += postProcess.Rule.GetWeightValue()
+				postProcessOutputLocal.IndexValues = append(postProcessOutputLocal.IndexValues, postProcess.IndexValue)
+			}
+		}
+
+		postProcessOutputLocal.IDs = append(postProcessOutputLocal.IDs, entityId)
+
+		(*postProcessOutput)[postProcessId] = postProcessOutputLocal
+
+	}
+
+	return hasPostProcessData
 }
 
 func readMatchesPrev(fs afero.Fs, matchParameters match.MatchParameters, entitiesType string) (MatchOutputType, error) {
@@ -251,16 +342,31 @@ func readMatchesPrev(fs afero.Fs, matchParameters match.MatchParameters, entitie
 		return MatchOutputType{}, nil
 	}
 
-	sanitizedType := config.Sanitize(entitiesType)
-	fullMatchPathPrev := filepath.Join(sanitizedPrevResultDir, fmt.Sprintf("%s.json", sanitizedType))
+	return readMatchesFile(fs, sanitizedPrevResultDir, entitiesType)
 
-	data, err := afero.ReadFile(fs, fullMatchPathPrev)
+}
+
+func readMatchesCurrent(fs afero.Fs, matchParameters match.MatchParameters, entitiesType string) (MatchOutputType, error) {
+	sanitizedOutputDir := filepath.Clean(matchParameters.OutputDir)
+	_, err := afero.Exists(fs, sanitizedOutputDir)
+	if err != nil {
+		return MatchOutputType{}, nil
+	}
+
+	return readMatchesFile(fs, sanitizedOutputDir, entitiesType)
+
+}
+
+func readMatchesFile(fs afero.Fs, sanitizedDir string, entitiesType string) (MatchOutputType, error) {
+	matchPath := getFullMatchPath(sanitizedDir, entitiesType)
+
+	data, err := afero.ReadFile(fs, matchPath)
 	if err != nil {
 		return MatchOutputType{}, nil
 	}
 
 	if len(data) == 0 {
-		return MatchOutputType{}, fmt.Errorf("file `%s` is empty", fullMatchPathPrev)
+		return MatchOutputType{}, fmt.Errorf("file `%s` is empty", matchPath)
 	}
 
 	var prevResult MatchOutputType
@@ -271,7 +377,6 @@ func readMatchesPrev(fs afero.Fs, matchParameters match.MatchParameters, entitie
 	}
 
 	return prevResult, nil
-
 }
 
 func writeMatches(fs afero.Fs, matchParameters match.MatchParameters, entitiesType string, output MatchOutputType) error {
@@ -291,10 +396,9 @@ func writeMatches(fs afero.Fs, matchParameters match.MatchParameters, entitiesTy
 		return err
 	}
 
-	sanitizedType := config.Sanitize(entitiesType)
-	fullMatchPath := filepath.Join(sanitizedOutputDir, fmt.Sprintf("%s.json", sanitizedType))
+	matchPath := getFullMatchPath(sanitizedOutputDir, entitiesType)
 
-	err = afero.WriteFile(fs, fullMatchPath, outputAsJson, 0664)
+	err = afero.WriteFile(fs, matchPath, outputAsJson, 0664)
 
 	if err != nil {
 		return err
@@ -302,4 +406,11 @@ func writeMatches(fs afero.Fs, matchParameters match.MatchParameters, entitiesTy
 
 	return nil
 
+}
+
+func getFullMatchPath(sanitizedDir string, entitiesType string) string {
+	sanitizedType := config.Sanitize(entitiesType)
+	fullMatchPath := filepath.Join(sanitizedDir, fmt.Sprintf("%s.json", sanitizedType))
+
+	return fullMatchPath
 }

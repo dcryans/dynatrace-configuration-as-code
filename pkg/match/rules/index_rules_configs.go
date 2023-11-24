@@ -21,55 +21,57 @@ const Settings20V1Id = "dtSettings20V1Id"
 const DownloadedKey = "downloaded"
 const ValueKey = "value"
 
-var INDEX_CONFIG_LIST_CONFIGS = []IndexRuleType{
-	{
-		IsSeed:      true,
-		SplitMatch:  true,
-		WeightValue: 100,
-		IndexRules: []IndexRule{
-			{
-				Name:              "Config Name",
-				Path:              []string{ConfigNameKey},
-				WeightValue:       1,
-				SelfMatchDisabled: false,
-			},
-			{
-				Name:              "Scope",
-				Path:              []string{DownloadedKey, "scope"},
-				WeightValue:       1,
-				SelfMatchDisabled: false,
-			},
-			{
-				Name:              "Dashboard Owner",
-				Path:              []string{DownloadedKey, ValueKey, "dashboardMetadata", "owner"},
-				WeightValue:       1,
-				SelfMatchDisabled: false,
-			},
-		},
-	},
-	{
-		IsSeed:      false,
-		SplitMatch:  false,
-		WeightValue: 90,
-		IndexRules: []IndexRule{
-			{
-				Name:              "Entities List",
-				Path:              []string{EntitiesListKey},
-				WeightValue:       1,
-				SelfMatchDisabled: false,
+var INDEX_CONFIG_LIST_CONFIGS = IndexRuleTypeList{
+	RuleTypes: []IndexRuleType{
+		{
+			IsSeed:      true,
+			SplitMatch:  true,
+			WeightValue: 100,
+			Rules: []IndexRule{
+				{
+					Name:              "Config Name",
+					Path:              []string{ConfigNameKey},
+					WeightValue:       1,
+					SelfMatchDisabled: false,
+				},
+				{
+					Name:              "Scope",
+					Path:              []string{DownloadedKey, "scope"},
+					WeightValue:       1,
+					SelfMatchDisabled: false,
+				},
+				{
+					Name:              "Dashboard Owner",
+					Path:              []string{DownloadedKey, ValueKey, "dashboardMetadata", "owner"},
+					WeightValue:       1,
+					SelfMatchDisabled: false,
+				},
 			},
 		},
-	},
-	{
-		IsSeed:      false,
-		SplitMatch:  false,
-		WeightValue: 50,
-		IndexRules: []IndexRule{
-			{
-				Name:              "id",
-				Path:              []string{ConfigIdKey},
-				WeightValue:       2,
-				SelfMatchDisabled: true,
+		{
+			IsSeed:      false,
+			SplitMatch:  false,
+			WeightValue: 90,
+			Rules: []IndexRule{
+				{
+					Name:              "Entities List",
+					Path:              []string{EntitiesListKey},
+					WeightValue:       1,
+					SelfMatchDisabled: false,
+				},
+			},
+		},
+		{
+			IsSeed:      false,
+			SplitMatch:  false,
+			WeightValue: 50,
+			Rules: []IndexRule{
+				{
+					Name:              "id",
+					Path:              []string{ConfigIdKey},
+					WeightValue:       2,
+					SelfMatchDisabled: true,
+				},
 			},
 		},
 	},

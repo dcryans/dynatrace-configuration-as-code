@@ -124,7 +124,7 @@ func compareCompareResults(a CompareResult, b CompareResult) int {
 	}
 }
 
-func extractUniqueTopMatch(results *IndexCompareResultList) []CompareResult {
+func extractUniqueTopMatch(results *CompareResultList) []CompareResult {
 
 	uniqueTopMatches := []CompareResult{}
 

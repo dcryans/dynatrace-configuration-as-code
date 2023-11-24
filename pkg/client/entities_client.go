@@ -40,10 +40,13 @@ var extraEntitiesFields = map[string][]string{
 
 func getEntitiesTypeFields(entitiesType EntitiesType, ignoreProperties []string) string {
 	typeFields := defaultListEntitiesFields
-	entityRulesFieldsL2 := rules.GenExtraFieldsL2(rules.INDEX_CONFIG_LIST_ENTITIES)
-
-	typeFields = addFields(entityRulesFieldsL2, ignoreProperties, entitiesType, typeFields)
 	typeFields = addFields(extraEntitiesFields, ignoreProperties, entitiesType, typeFields)
+
+	rulesFieldsL2Index := rules.GenExtraFieldsL2(&rules.INDEX_CONFIG_LIST_ENTITIES)
+	typeFields = addFields(rulesFieldsL2Index, ignoreProperties, entitiesType, typeFields)
+
+	rulesFieldsL2Hierarchy := rules.GenExtraFieldsL2(&rules.HIERARCHY_SOURCE_LIST_ENTITIES)
+	typeFields = addFields(rulesFieldsL2Hierarchy, ignoreProperties, entitiesType, typeFields)
 
 	return typeFields
 }
@@ -56,22 +59,31 @@ func addFields(extraEntitiesFields map[string][]string, ignoreProperties []strin
 			continue
 		}
 
-		fieldSliceObject := getDynamicFieldFromObject(entitiesType, topField)
-
-		if isInvalidReflectionValue(fieldSliceObject) {
-			continue
-		}
 		for _, subField := range subFieldList {
 			if contains(ignoreProperties, subField) {
 				continue
 			}
-			if hasSpecificFieldValueInSlice(fieldSliceObject, "id", subField) {
+
+			_, exists := L2FieldWithIdExists(entitiesType, topField, subField)
+
+			if exists {
 				typeFields = typeFields + ",+" + topField + "." + subField
 			}
 		}
 	}
 
 	return typeFields
+}
+
+func L2FieldWithIdExists(entitiesType EntitiesType, topField string, subField string) (reflect.Value, bool) {
+
+	fieldSliceObject := GetDynamicFieldFromObject(entitiesType, topField)
+
+	if IsInvalidReflectionValue(fieldSliceObject) {
+		return reflect.Value{}, false
+	}
+
+	return hasSpecificFieldValueInSlice(fieldSliceObject, "id", subField)
 }
 
 func contains(s []string, e string) bool {
@@ -83,7 +95,7 @@ func contains(s []string, e string) bool {
 	return false
 }
 
-func getDynamicFieldFromObject(object interface{}, field string) reflect.Value {
+func GetDynamicFieldFromObject(object interface{}, field string) reflect.Value {
 	reflection := reflect.ValueOf(object)
 
 	fieldValue := reflect.Indirect(reflection).FieldByName(field) // nosemgrep: go.lang.security.audit.unsafe-reflect-by-name.unsafe-reflect-by-name
@@ -91,36 +103,50 @@ func getDynamicFieldFromObject(object interface{}, field string) reflect.Value {
 	// We are providing uncapitalized fields from json maps
 	// But GoLang forces capitalized for unmarshalling
 	// Let's try a capitalized first letter
-	if isInvalidReflectionValue(fieldValue) {
+	if IsInvalidReflectionValue(fieldValue) {
 		field = capitalizeFirstLetter(field)
 		fieldValue = reflect.Indirect(reflection).FieldByName(field) // nosemgrep: go.lang.security.audit.unsafe-reflect-by-name.unsafe-reflect-by-name
 	}
 	return fieldValue
 }
 
-func getDynamicFieldFromMapReflection(reflection reflect.Value, field string) reflect.Value {
+func GetDynamicFieldFromMapReflection(reflection reflect.Value, field string) reflect.Value {
 	return reflection.MapIndex(reflect.ValueOf(field))
 }
 
-func hasSpecificFieldValueInSlice(slice reflect.Value, field string, searchFieldValue string) bool {
+func hasSpecificFieldValueInSlice(slice reflect.Value, field string, searchFieldValue string) (reflect.Value, bool) {
 
 	for i := 0; i < slice.Len(); i++ {
 		element := slice.Index(i)
-		if isInvalidReflectionValue(element) {
+		if IsInvalidReflectionValue(element) {
 			continue
 		}
 
-		idValue := getDynamicFieldFromMapReflection(element, field)
-		if isInvalidReflectionValue(idValue) {
-			continue
-		}
-		if idValue.Interface().(string) == searchFieldValue {
-			return true
+		idValueString := GetStringFromMapReflection(element, field)
+
+		if idValueString == searchFieldValue {
+			return element, true
 		}
 	}
 
-	return false
+	return reflect.Value{}, false
 
+}
+
+func GetStringFromMapReflection(element reflect.Value, field string) string {
+	idValue := GetDynamicFieldFromMapReflection(element, field)
+
+	if IsInvalidReflectionValue(idValue) {
+		return ""
+	}
+
+	stringValue, isString := idValue.Interface().(string)
+
+	if isString {
+		return stringValue
+	}
+
+	return ""
 }
 
 func capitalizeFirstLetter(str string) string {
@@ -131,7 +157,7 @@ func capitalizeFirstLetter(str string) string {
 	return capitalizedString
 }
 
-func isInvalidReflectionValue(value reflect.Value) bool {
+func IsInvalidReflectionValue(value reflect.Value) bool {
 	if value.Kind() == reflect.Invalid {
 		return true
 	} else {

@@ -50,17 +50,30 @@ func addValueToIndex(index *IndexMap, value interface{}, itemId int) {
 	if isString {
 		addUniqueValueToIndex(
 			index, stringValue, itemId)
-	} else {
-		sliceValue := value.([]interface{})
+		return
+	}
 
+	stringSliceValue, isStringSlice := value.([]string)
+	if isStringSlice {
+		for _, uniqueValue := range stringSliceValue {
+			addUniqueValueToIndex(
+				index, uniqueValue, itemId)
+		}
+		return
+	}
+
+	sliceValue, isInterfaceSlice := value.([]interface{})
+
+	if isInterfaceSlice {
 		for _, uniqueValue := range sliceValue {
 			addUniqueValueToIndex(
 				index, uniqueValue.(string), itemId)
 		}
+		return
 	}
 }
 
-func getValueFromPath(item interface{}, path []string) interface{} {
+func GetValueFromPath(item interface{}, path []string) interface{} {
 
 	if len(path) <= 0 {
 		return nil
@@ -88,6 +101,60 @@ func getValueFromPath(item interface{}, path []string) interface{} {
 	}
 }
 
+func GetValueFromList(listItemKey rules.ListItemKey, value interface{}) interface{} {
+
+	if value == nil {
+		return nil
+	}
+
+	sliceValue, isSlice := value.([]interface{})
+
+	if isSlice {
+		// pass
+	} else {
+		return nil
+	}
+
+	values := []string{}
+
+	for _, item := range sliceValue {
+		itemMap, isMap := item.(map[string]interface{})
+
+		if isMap {
+			// pass
+		} else {
+			return nil
+		}
+
+		keyValue, keyFound := itemMap[listItemKey.KeyKey]
+
+		if keyFound {
+			// pass
+		} else {
+			return nil
+		}
+
+		if keyValue.(string) == listItemKey.KeyValue {
+			valueValue, valueFound := itemMap[listItemKey.ValueKey]
+
+			if valueFound {
+				values = append(values, valueValue.(string))
+			} else {
+				return nil
+			}
+
+		}
+
+	}
+
+	if len(values) == 0 {
+		return nil
+	}
+
+	return values
+
+}
+
 func flattenSortIndex(index *IndexMap) []IndexEntry {
 
 	flatIndex := make([]IndexEntry, len(*index))
@@ -112,7 +179,10 @@ func genSortedItemsIndex(indexRule rules.IndexRule, items *MatchProcessingEnv) [
 
 	for _, itemIdx := range *(items.CurrentRemainingMatch) {
 
-		value := getValueFromPath((*items.RawMatchList.GetValues())[itemIdx], indexRule.Path)
+		value := GetValueFromPath((*items.RawMatchList.GetValues())[itemIdx], indexRule.Path)
+		if (indexRule.ListItemKey != rules.ListItemKey{} && indexRule.ListItemKey.KeyKey != "") {
+			value = GetValueFromList(indexRule.ListItemKey, value)
+		}
 		if value != nil {
 			addValueToIndex(&index, value, itemIdx)
 		}

@@ -23,18 +23,18 @@ import (
 
 // ByWeightTypeValue implements sort.Interface for []IndexRule based on
 // the WeightTypeValue field.
-type ByWeightTypeValue []rules.IndexRuleType
+type byWeightTypeValue []rules.IndexRuleType
 
-func (a ByWeightTypeValue) Len() int           { return len(a) }
-func (a ByWeightTypeValue) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a ByWeightTypeValue) Less(i, j int) bool { return a[j].WeightValue < a[i].WeightValue }
+func (a byWeightTypeValue) Len() int           { return len(a) }
+func (a byWeightTypeValue) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a byWeightTypeValue) Less(i, j int) bool { return a[j].WeightValue < a[i].WeightValue }
 
 type IndexRuleMapGenerator struct {
 	SelfMatch    bool
-	baseRuleList []rules.IndexRuleType
+	baseRuleList rules.IndexRuleTypeList
 }
 
-func NewIndexRuleMapGenerator(selfMatch bool, ruleList []rules.IndexRuleType) *IndexRuleMapGenerator {
+func NewIndexRuleMapGenerator(selfMatch bool, ruleList rules.IndexRuleTypeList) *IndexRuleMapGenerator {
 	i := new(IndexRuleMapGenerator)
 	i.SelfMatch = selfMatch
 	i.baseRuleList = ruleList
@@ -43,23 +43,23 @@ func NewIndexRuleMapGenerator(selfMatch bool, ruleList []rules.IndexRuleType) *I
 
 func (i *IndexRuleMapGenerator) genActiveList() []rules.IndexRuleType {
 
-	activeList := make([]rules.IndexRuleType, 0, len(i.baseRuleList))
+	activeList := make([]rules.IndexRuleType, 0, len(i.baseRuleList.RuleTypes))
 
-	for idx, confType := range i.baseRuleList {
+	for idx, confType := range i.baseRuleList.RuleTypes {
 		ruleType := rules.IndexRuleType{
 			Key:         idx,
 			IsSeed:      confType.IsSeed,
 			SplitMatch:  confType.SplitMatch,
 			WeightValue: confType.WeightValue,
-			IndexRules:  make([]rules.IndexRule, 0, len(confType.IndexRules)),
+			Rules:       make([]rules.IndexRule, 0, len(confType.Rules)),
 		}
-		for _, conf := range confType.IndexRules {
+		for _, conf := range confType.Rules {
 			if conf.SelfMatchDisabled && i.SelfMatch {
 				continue
 			}
-			ruleType.IndexRules = append(ruleType.IndexRules, conf)
+			ruleType.Rules = append(ruleType.Rules, conf)
 		}
-		if len(ruleType.IndexRules) >= 1 {
+		if len(ruleType.Rules) >= 1 {
 			activeList = append(activeList, ruleType)
 		}
 	}
@@ -71,12 +71,12 @@ func (i *IndexRuleMapGenerator) genSortedActiveList() []rules.IndexRuleType {
 
 	activeList := i.genActiveList()
 
-	sort.Sort(ByWeightTypeValue(activeList))
+	sort.Sort(byWeightTypeValue(activeList))
 
 	return activeList
 }
 
-func runIndexRule(indexRule rules.IndexRule, indexRuleType rules.IndexRuleType, entityProcessingPtr *MatchProcessing, resultListPtr *IndexCompareResultList) bool {
+func runIndexRule(indexRule rules.IndexRule, indexRuleType rules.IndexRuleType, entityProcessingPtr *MatchProcessing, resultListPtr *CompareResultList) bool {
 
 	countsTowardsMax := false
 
@@ -108,21 +108,23 @@ func keepMatches(matchedEntities map[int]int, uniqueMatch []CompareResult) map[i
 	return matchedEntities
 }
 
-func (i *IndexRuleMapGenerator) RunIndexRuleAll(matchProcessingPtr *MatchProcessing) (*IndexCompareResultList, *map[int]int) {
+func (i *IndexRuleMapGenerator) RunIndexRuleAll(matchProcessingPtr *MatchProcessing) (*CompareResultList, *map[int]int) {
 	matchedEntities := map[int]int{}
-	remainingResultsPtr := &IndexCompareResultList{}
+	remainingResultsPtr := &CompareResultList{}
 
 	ruleTypes := i.genSortedActiveList()
 
 	log.Info("Type: %s -> source count %d and target count %d", matchProcessingPtr.GetType(),
 		matchProcessingPtr.Source.RawMatchList.Len(), matchProcessingPtr.Target.RawMatchList.Len())
 
+	allPostProcessLists := []PostProcess{}
+
 	for _, indexRuleType := range ruleTypes {
-		resultListPtr := newIndexCompareResultList(indexRuleType)
+		resultListPtr := NewCompareResultList(&indexRuleType)
 		matchProcessingPtr.PrepareRemainingMatch(true, indexRuleType.IsSeed, remainingResultsPtr)
 
 		maxMatchValue := 0
-		for _, indexRule := range indexRuleType.IndexRules {
+		for _, indexRule := range indexRuleType.Rules {
 			countsTowardsMax := runIndexRule(indexRule, indexRuleType, matchProcessingPtr, resultListPtr)
 			if countsTowardsMax {
 				maxMatchValue += indexRule.WeightValue
@@ -134,10 +136,14 @@ func (i *IndexRuleMapGenerator) RunIndexRuleAll(matchProcessingPtr *MatchProcess
 		uniqueMatchEntities := resultListPtr.ProcessMatches(indexRuleType.SplitMatch, maxMatchValue)
 		remainingResultsPtr = resultListPtr
 
-		matchProcessingPtr.adjustremainingMatch(&uniqueMatchEntities)
+		matchProcessingPtr.AdjustremainingMatch(&uniqueMatchEntities)
 
 		matchedEntities = keepMatches(matchedEntities, uniqueMatchEntities)
+
+		allPostProcessLists = append(allPostProcessLists, resultListPtr.PostProcessList...)
 	}
+
+	remainingResultsPtr.PostProcessList = allPostProcessLists
 
 	log.Info("Type: %s -> source count %d and target count %d -> Matched: %d",
 		matchProcessingPtr.GetType(), len(*matchProcessingPtr.Source.RawMatchList.GetValues()),

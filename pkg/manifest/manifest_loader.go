@@ -17,6 +17,10 @@ package manifest
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/files"
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/log"
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/slices"
@@ -24,9 +28,6 @@ import (
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/version"
 	"github.com/spf13/afero"
 	"gopkg.in/yaml.v2"
-	"os"
-	"path/filepath"
-	"strings"
 )
 
 // LoaderContext holds all information for [LoadManifest]
@@ -372,7 +373,7 @@ func toEnvironments(context *LoaderContext, groups []group) (map[string]Environm
 	return environments, nil
 }
 
-func shouldSkipEnv(context *LoaderContext, group group, env environment) bool {
+func shouldSkipEnv(context *LoaderContext, group group, env Environment) bool {
 	// if nothing is restricted, everything is allowed
 	if len(context.Groups) == 0 && len(context.Environments) == 0 {
 		return false
@@ -389,7 +390,7 @@ func shouldSkipEnv(context *LoaderContext, group group, env environment) bool {
 	return true
 }
 
-func parseEnvironment(context *LoaderContext, config environment, group string) (EnvironmentDefinition, []error) {
+func parseEnvironment(context *LoaderContext, config Environment, group string) (EnvironmentDefinition, []error) {
 	var errs []error
 
 	auth, err := parseAuth(config.Auth)

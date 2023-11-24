@@ -49,7 +49,7 @@ type auth struct {
 	OAuth *oAuth     `yaml:"oAuth,omitempty"`
 }
 
-type environment struct {
+type Environment struct {
 	Name string `yaml:"name"`
 	URL  url    `yaml:"url"`
 
@@ -71,7 +71,7 @@ type url struct {
 
 type group struct {
 	Name         string        `yaml:"name"`
-	Environments []environment `yaml:"environments"`
+	Environments []Environment `yaml:"environments"`
 }
 
 type manifest struct {

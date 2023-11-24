@@ -23,10 +23,10 @@ import (
 	"github.com/spf13/afero"
 )
 
-func MatchEntities(fs afero.Fs, matchParameters match.MatchParameters, entityPerTypeSource project.ConfigsPerType, entityPerTypeTarget project.ConfigsPerType) ([]string, int, int, error) {
+func MatchEntities(fs afero.Fs, matchParameters match.MatchParameters, entityPerTypeSource project.ConfigsPerType, entityPerTypeTarget project.ConfigsPerType) (map[string]string, int, int, error) {
 	entitiesSourceCount := 0
 	entitiesTargetCount := 0
-	stats := []string{fmt.Sprintf("%65s %10s %12s %10s %10s %10s", "Type", "Matched", "MultiMatched", "UnMatched", "Total", "Source")}
+	stats := map[string]string{}
 
 	for entitiesType := range entityPerTypeTarget {
 
@@ -34,27 +34,29 @@ func MatchEntities(fs afero.Fs, matchParameters match.MatchParameters, entityPer
 
 		entityProcessingPtr, err := genEntityProcessing(entityPerTypeSource, entityPerTypeTarget, entitiesType)
 		if err != nil {
-			return []string{}, 0, 0, err
+			return map[string]string{}, 0, 0, err
 		}
-		entitiesSourceCountType := len(entityProcessingPtr.Source.RemainingMatch)
-		entitiesSourceCount += entitiesSourceCountType
-		entitiesTargetCountType := len(entityProcessingPtr.Target.RemainingMatch)
-		entitiesTargetCount += entitiesTargetCountType
-
 		prevMatches, err := readMatchesPrev(fs, matchParameters, entitiesType)
 		if err != nil {
-			return []string{}, 0, 0, err
+			return map[string]string{}, 0, 0, err
 		}
 
 		output := runRules(entityProcessingPtr, matchParameters, prevMatches)
 
 		err = writeMatches(fs, matchParameters, entitiesType, output)
 		if err != nil {
-			return []string{}, 0, 0, fmt.Errorf("failed to persist matches of type: %s, see error: %w", entitiesType, err)
+			return map[string]string{}, 0, 0, fmt.Errorf("failed to persist matches of type: %s, see error: %w", entitiesType, err)
 		}
 
-		stats = append(stats, fmt.Sprintf("%65s %10d %12d %10d %10d %10d", entitiesType, len(output.Matches), len(output.MultiMatched), len(output.UnMatched), entitiesTargetCountType, entitiesSourceCountType))
+		entitiesSourceCount += entityProcessingPtr.Source.RawMatchList.Len()
+		entitiesTargetCount += entityProcessingPtr.Target.RawMatchList.Len()
+		stats = setStats(stats, entitiesType, output, entityProcessingPtr)
 	}
 
 	return stats, entitiesSourceCount, entitiesTargetCount, nil
+}
+
+func setStats(stats map[string]string, entitiesType string, output MatchOutputType, entityProcessingPtr *match.MatchProcessing) map[string]string {
+	stats[entitiesType] = fmt.Sprintf("%65s %10d %12d %10d %10d %10d", entitiesType, len(output.Matches), output.calcMultiMatched(), len(output.UnMatched), entityProcessingPtr.Target.RawMatchList.Len(), entityProcessingPtr.Source.RawMatchList.Len())
+	return stats
 }

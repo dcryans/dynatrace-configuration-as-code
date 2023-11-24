@@ -21,30 +21,30 @@ import (
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/match/rules"
 )
 
-type IndexCompareResultList struct {
-	RuleType        rules.IndexRuleType
+type CompareResultList struct {
+	RuleType        rules.RuleType
 	CompareResults  []CompareResult
 	PostProcessList []PostProcess
 }
 
 type PostProcess struct {
-	RuleType rules.IndexRuleType
-	Rule     rules.IndexRule
-	LeftMap  map[int]bool
-	RightMap map[int]bool
-	Done     map[int]map[int]bool
+	RuleType   rules.RuleType
+	Rule       rules.Rule
+	IndexValue string
+	LeftMap    map[int]bool
+	RightMap   map[int]bool
 }
 
-func newIndexCompareResultList(ruleType rules.IndexRuleType) *IndexCompareResultList {
-	i := new(IndexCompareResultList)
+func NewCompareResultList(ruleType rules.RuleType) *CompareResultList {
+	i := new(CompareResultList)
 	i.RuleType = ruleType
 	i.CompareResults = []CompareResult{}
 	i.PostProcessList = []PostProcess{}
 	return i
 }
 
-func newReversedIndexCompareResultList(sourceList *IndexCompareResultList) *IndexCompareResultList {
-	i := new(IndexCompareResultList)
+func newReversedCompareResultList(sourceList *CompareResultList) *CompareResultList {
+	i := new(CompareResultList)
 	size := len(sourceList.CompareResults)
 	i.CompareResults = make([]CompareResult, size)
 	resI := 0
@@ -60,18 +60,18 @@ func newReversedIndexCompareResultList(sourceList *IndexCompareResultList) *Inde
 	return i
 }
 
-func (i *IndexCompareResultList) addResult(entityIdSource int, entityIdTarget int, WeightValue int) {
+func (i *CompareResultList) AddResult(entityIdSource int, entityIdTarget int, WeightValue int) {
 	i.CompareResults = append(i.CompareResults, CompareResult{entityIdSource, entityIdTarget, WeightValue})
 }
 
-func (i *IndexCompareResultList) addPostProcess(ruleType rules.IndexRuleType, rule rules.IndexRule, leftList []int, rightList []int) {
+func (i *CompareResultList) addPostProcess(ruleType rules.RuleType, rule rules.Rule, leftList []int, rightList []int, indexValue string) {
 
 	postProcess := PostProcess{
-		RuleType: ruleType,
-		Rule:     rule,
-		LeftMap:  make(map[int]bool, len(leftList)),
-		RightMap: make(map[int]bool, len(rightList)),
-		Done:     map[int]map[int]bool{},
+		RuleType:   ruleType,
+		Rule:       rule,
+		IndexValue: indexValue,
+		LeftMap:    make(map[int]bool, len(leftList)),
+		RightMap:   make(map[int]bool, len(rightList)),
 	}
 
 	for _, id := range leftList {
@@ -84,13 +84,13 @@ func (i *IndexCompareResultList) addPostProcess(ruleType rules.IndexRuleType, ru
 	i.PostProcessList = append(i.PostProcessList, postProcess)
 }
 
-func (i *IndexCompareResultList) sortTopMatches() {
+func (i *CompareResultList) sortTopMatches() {
 
 	sort.Sort(ByTopMatch(i.CompareResults))
 
 }
 
-func (i *IndexCompareResultList) keepTopMatchesOnly() {
+func (i *CompareResultList) keepTopMatchesOnly() {
 
 	if len(i.CompareResults) == 0 {
 		return
@@ -119,25 +119,25 @@ func (i *IndexCompareResultList) keepTopMatchesOnly() {
 
 }
 
-func (i *IndexCompareResultList) reduceBothForwardAndBackward() *IndexCompareResultList {
+func (i *CompareResultList) reduceBothForwardAndBackward() *CompareResultList {
 
 	i.keepTopMatchesOnly()
 
-	reverseResults := newReversedIndexCompareResultList(i)
+	reverseResults := newReversedCompareResultList(i)
 	reverseResults.keepTopMatchesOnly()
 
-	i.CompareResults = newReversedIndexCompareResultList(reverseResults).CompareResults
+	i.CompareResults = newReversedCompareResultList(reverseResults).CompareResults
 
 	return reverseResults
 }
 
-func (i *IndexCompareResultList) sort() {
+func (i *CompareResultList) sort() {
 
 	sort.Sort(ByLeftRight(i.CompareResults))
 
 }
 
-func (i *IndexCompareResultList) getUniqueMatchItems() []CompareResult {
+func (i *CompareResultList) getUniqueMatchItems() []CompareResult {
 
 	if len(i.CompareResults) == 0 {
 		return []CompareResult{}
@@ -170,7 +170,7 @@ func (i *IndexCompareResultList) getUniqueMatchItems() []CompareResult {
 	return uniqueMatchItems
 }
 
-func (i *IndexCompareResultList) sumMatchWeightValues(splitMatch bool, maxMatchValue int, doPostProcess bool) {
+func (i *CompareResultList) sumMatchWeightValues(splitMatch bool, maxMatchValue int, doPostProcess bool) {
 
 	if len(i.CompareResults) <= 1 {
 		return
@@ -221,13 +221,13 @@ func (i *IndexCompareResultList) sumMatchWeightValues(splitMatch bool, maxMatchV
 
 }
 
-func (i *IndexCompareResultList) postProcess(prevTotal *CompareResult) bool {
+func (i *CompareResultList) postProcess(prevTotal *CompareResult) bool {
 	keepRecord := true
 
 	for _, postProcess := range i.PostProcessList {
 		if postProcess.LeftMap[prevTotal.LeftId] && postProcess.RightMap[prevTotal.RightId] {
-			prevTotal.Weight += postProcess.Rule.WeightValue
-		} else if postProcess.RuleType.SplitMatch {
+			prevTotal.Weight += postProcess.Rule.GetWeightValue()
+		} else if postProcess.RuleType.IsSplitMatch() {
 			keepRecord = false
 		}
 	}
@@ -235,7 +235,7 @@ func (i *IndexCompareResultList) postProcess(prevTotal *CompareResult) bool {
 	return keepRecord
 }
 
-func (i *IndexCompareResultList) getMaxWeight() int {
+func (i *CompareResultList) getMaxWeight() int {
 	var maxWeight int = 0
 	for _, result := range i.CompareResults {
 		if result.Weight > maxWeight {
@@ -246,13 +246,13 @@ func (i *IndexCompareResultList) getMaxWeight() int {
 	return maxWeight
 }
 
-func (i *IndexCompareResultList) elevateWeight(lowerMaxWeight int) {
+func (i *CompareResultList) elevateWeight(lowerMaxWeight int) {
 	for idx, _ := range i.CompareResults {
 		i.CompareResults[idx].Weight += lowerMaxWeight
 	}
 }
 
-func (i *IndexCompareResultList) trimUniqueMatches(uniqueMatchItems []CompareResult) {
+func (i *CompareResultList) trimUniqueMatches(uniqueMatchItems []CompareResult) {
 
 	newLen := len(i.CompareResults) - len(uniqueMatchItems)
 	trimmedList := make([]CompareResult, newLen)
@@ -280,7 +280,6 @@ func (i *IndexCompareResultList) trimUniqueMatches(uniqueMatchItems []CompareRes
 
 		} else if diff == 0 {
 			curI++
-			sglI++
 
 		} else {
 			sglI++
@@ -297,7 +296,7 @@ func (i *IndexCompareResultList) trimUniqueMatches(uniqueMatchItems []CompareRes
 
 }
 
-func (i *IndexCompareResultList) MergeRemainingWeightType(remainingResults *IndexCompareResultList) {
+func (i *CompareResultList) MergeRemainingWeightType(remainingResults *CompareResultList) {
 	i.sumMatchWeightValues(false, 0, false)
 	lowerMaxWeight := i.getMaxWeight()
 	remainingResults.elevateWeight(lowerMaxWeight)
@@ -306,7 +305,7 @@ func (i *IndexCompareResultList) MergeRemainingWeightType(remainingResults *Inde
 	i.sort()
 }
 
-func (i *IndexCompareResultList) ProcessMatches(splitMatch bool, maxMatchValue int) []CompareResult {
+func (i *CompareResultList) ProcessMatches(splitMatch bool, maxMatchValue int) []CompareResult {
 
 	if len(i.CompareResults) == 0 {
 		return []CompareResult{}

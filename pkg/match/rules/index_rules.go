@@ -14,53 +14,51 @@
 
 package rules
 
-import (
-	"github.com/dynatrace/dynatrace-configuration-as-code/internal/slices"
-)
+type IndexRuleTypeList struct {
+	RuleTypes []IndexRuleType
+}
 
 type IndexRuleType struct {
 	Key         int
 	IsSeed      bool
 	SplitMatch  bool
 	WeightValue int
-	IndexRules  []IndexRule
+	Rules       []IndexRule
 }
 
 type IndexRule struct {
 	Name              string
 	Path              []string
+	ListItemKey       ListItemKey
 	WeightValue       int
 	SelfMatchDisabled bool
 	SpecificType      []string
 }
 
-func GenExtraFieldsL2(ruleList []IndexRuleType) map[string][]string {
+type ListItemKey struct {
+	KeyKey   string
+	KeyValue string
+	ValueKey string
+}
 
-	extraFields := map[string][]string{}
-	depthL2 := 2
+func (me *IndexRuleTypeList) GetPaths() [][]string {
+	paths := [][]string{}
 
-	for _, confType := range ruleList {
-
-		for _, conf := range confType.IndexRules {
-
-			if len(conf.Path) != depthL2 {
-				continue
-			}
-
-			key := conf.Path[0]
-			value := conf.Path[1]
-
-			_, found := extraFields[key]
-
-			if !found {
-				extraFields[key] = []string{}
-			}
-
-			if !slices.Contains(extraFields[key], value) {
-				extraFields[key] = append(extraFields[key], value)
+	for _, indexRuleType := range me.RuleTypes {
+		for _, indexRule := range indexRuleType.Rules {
+			if len(indexRule.Path) > 0 {
+				paths = append(paths, indexRule.Path)
 			}
 		}
 	}
 
-	return extraFields
+	return paths
+}
+
+func (me *IndexRuleType) IsSplitMatch() bool {
+	return me.SplitMatch
+}
+
+func (me *IndexRule) GetWeightValue() int {
+	return me.WeightValue
 }

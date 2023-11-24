@@ -14,55 +14,109 @@
 
 package rules
 
-var INDEX_CONFIG_LIST_ENTITIES = []IndexRuleType{
-	{
-		IsSeed:      true,
-		WeightValue: 100,
-		IndexRules: []IndexRule{
-			{
-				Name:              "Detected Name",
-				Path:              []string{"properties", "detectedName"},
-				WeightValue:       1,
-				SelfMatchDisabled: false,
-			},
-			{
-				Name:              "One Agent Custom Host Name",
-				Path:              []string{"properties", "oneAgentCustomHostName"},
-				WeightValue:       1,
-				SelfMatchDisabled: false,
-			},
-		},
-	},
-	{
-		IsSeed:      true,
-		WeightValue: 90,
-		IndexRules: []IndexRule{
-			{
-				Name:              "Entity Id",
-				Path:              []string{"entityId"},
-				WeightValue:       1,
-				SelfMatchDisabled: true,
-			},
-			{
-				Name:              "Display Name",
-				Path:              []string{"displayName"},
-				WeightValue:       1,
-				SelfMatchDisabled: false,
+var INDEX_CONFIG_LIST_ENTITIES = IndexRuleTypeList{
+	RuleTypes: []IndexRuleType{
+		{
+			IsSeed:      true,
+			WeightValue: 100,
+			Rules: []IndexRule{
+				{
+					Name:              "Detected Name",
+					Path:              []string{"properties", "detectedName"},
+					WeightValue:       1,
+					SelfMatchDisabled: false,
+				},
+				{
+					Name:              "One Agent Custom Host Name",
+					Path:              []string{"properties", "oneAgentCustomHostName"},
+					WeightValue:       1,
+					SelfMatchDisabled: false,
+				},
+				{
+					Name:              "Geolocation Code",
+					Path:              []string{"properties", "geolocationCode"},
+					WeightValue:       1,
+					SelfMatchDisabled: false,
+				},
+				{
+					Name:              "Geolocation Type",
+					Path:              []string{"properties", "geolocationType"},
+					WeightValue:       1,
+					SelfMatchDisabled: false,
+				},
 			},
 		},
-	},
-	// ipAddress was tested with IsSeed = false on 5 million RBC Pre-Prod entities
-	// All matches were identical, except for Network Interfaces the were not matching as well
-	// Keeping IsSeed = true only has positive return
-	{
-		IsSeed:      true,
-		WeightValue: 50,
-		IndexRules: []IndexRule{
-			{
-				Name:              "Ip Addresses List",
-				Path:              []string{"properties", "ipAddress"},
-				WeightValue:       2,
-				SelfMatchDisabled: false,
+		{
+			IsSeed:      true,
+			WeightValue: 90,
+			Rules: []IndexRule{
+				{
+					Name:              "Entity Id",
+					Path:              []string{"entityId"},
+					WeightValue:       1,
+					SelfMatchDisabled: true,
+				},
+				{
+					Name:              "Display Name",
+					Path:              []string{"displayName"},
+					WeightValue:       1,
+					SelfMatchDisabled: false,
+				},
+			},
+		},
+		// ipAddress was tested with IsSeed = false on 5 million RBC Pre-Prod entities
+		// All matches were identical, except for Network Interfaces the were not matching as well
+		// Keeping IsSeed = true only has positive return
+		{
+			IsSeed:      true,
+			WeightValue: 50,
+			Rules: []IndexRule{
+				{
+					Name:              "Ip Addresses List",
+					Path:              []string{"properties", "ipAddress"},
+					WeightValue:       1,
+					SelfMatchDisabled: false,
+				},
+				{
+					Name:              "Internal Ip Addresses List",
+					Path:              []string{"properties", "internalIpAddresses"},
+					WeightValue:       1,
+					SelfMatchDisabled: false,
+				},
+			},
+		},
+		{
+			IsSeed:      true,
+			WeightValue: 40,
+			Rules: []IndexRule{
+				{
+					Name: "Executable Path",
+					Path: []string{"properties", "metadata"},
+					ListItemKey: ListItemKey{
+						KeyKey:   "key",
+						KeyValue: "EXE_PATH",
+						ValueKey: "value",
+					},
+					WeightValue:       1,
+					SelfMatchDisabled: false,
+				},
+			},
+		},
+		{
+			IsSeed:      false,
+			WeightValue: 30,
+			Rules: []IndexRule{
+				{
+					Name: "K8s Pod UID",
+					Path: []string{"properties", "metadata"},
+					ListItemKey: ListItemKey{
+						KeyKey:   "key",
+						KeyValue: "KUBERNETES_POD_UID",
+						ValueKey: "value",
+					},
+					WeightValue:       1,
+					SelfMatchDisabled: false,
+				},
 			},
 		},
 	},

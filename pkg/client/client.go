@@ -715,9 +715,10 @@ type EntitiesTypeListResponse struct {
 }
 
 type EntitiesType struct {
-	EntitiesTypeId  string                   `json:"type"`
-	ToRelationships []map[string]interface{} `json:"toRelationships"`
-	Properties      []map[string]interface{} `json:"properties"`
+	EntitiesTypeId    string                   `json:"type"`
+	ToRelationships   []map[string]interface{} `json:"toRelationships"`
+	FromRelationships []map[string]interface{} `json:"fromRelationships"`
+	Properties        []map[string]interface{} `json:"properties"`
 }
 
 func (e EntitiesType) String() string {

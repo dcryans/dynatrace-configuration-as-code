@@ -35,7 +35,7 @@ import (
 	"github.com/spf13/afero"
 )
 
-func genMultiMatchedMap(matchParameters match.MatchParameters, remainingResultsPtr *match.IndexCompareResultList, configProcessingPtr *match.MatchProcessing, configsTypeInfo configTypeInfo, configIdxToWriteSource *[]bool, prevMatches MatchOutputType) (map[string][]string, MatchStatus, Module, error) {
+func genMultiMatchedMap(matchParameters match.MatchParameters, remainingResultsPtr *match.CompareResultList, configProcessingPtr *match.MatchProcessing, configsTypeInfo configTypeInfo, configIdxToWriteSource *[]bool, prevMatches MatchOutputType) (map[string][]string, MatchStatus, Module, error) {
 
 	printMultiMatchedSample(remainingResultsPtr, configProcessingPtr)
 
@@ -214,7 +214,7 @@ func addConfigResult(matchParameters match.MatchParameters, configProcessingPtr 
 	return nil
 }
 
-func printMultiMatchedSample(remainingResultsPtr *match.IndexCompareResultList, configProcessingPtr *match.MatchProcessing) {
+func printMultiMatchedSample(remainingResultsPtr *match.CompareResultList, configProcessingPtr *match.MatchProcessing) {
 	multiMatchedCount := len(remainingResultsPtr.CompareResults)
 
 	if multiMatchedCount <= 0 {
@@ -289,7 +289,7 @@ type ConfigResultParam struct {
 
 const allConfigEntity = "all_configs"
 
-func genOutputPayload(matchParameters match.MatchParameters, configProcessingPtr *match.MatchProcessing, remainingResultsPtr *match.IndexCompareResultList, matchedConfigs *map[int]int, configsTypeInfo configTypeInfo, prevMatches MatchOutputType) (MatchOutputType, Module, []bool, error) {
+func genOutputPayload(matchParameters match.MatchParameters, configProcessingPtr *match.MatchProcessing, remainingResultsPtr *match.CompareResultList, matchedConfigs *map[int]int, configsTypeInfo configTypeInfo, prevMatches MatchOutputType) (MatchOutputType, Module, []bool, error) {
 
 	configIdxToWriteSource := make([]bool, len(*configProcessingPtr.Source.RawMatchList.GetValues()))
 

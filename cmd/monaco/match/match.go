@@ -16,6 +16,7 @@ package match
 
 import (
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/errutils"
@@ -82,6 +83,8 @@ func (d DefaultCommand) Match(fs afero.Fs, matchFileName string) error {
 	return nil
 }
 
+var STATS_HEADER = fmt.Sprintf("%65s %10s %12s %10s %10s %10s", "Type", "Matched", "MultiMatched", "UnMatched", "Total", "Source")
+
 func runAndPrintMatchEntities(fs afero.Fs, matchParameters match.MatchParameters, configsSource project.ConfigsPerType, configsTarget project.ConfigsPerType, startTime time.Time) error {
 
 	stats, entitiesSourceCount, entitiesTargetCount, err := matchEntities.MatchEntities(fs, matchParameters, configsSource, configsTarget)
@@ -89,11 +92,19 @@ func runAndPrintMatchEntities(fs afero.Fs, matchParameters match.MatchParameters
 		return err
 	}
 
-	for _, stat := range stats {
-		log.Info(stat)
-	}
+	printSortedStatsWithHeader(stats)
 
 	p := message.NewPrinter(language.English)
+	log.Info("Finished matching %d entity types, %s source entities and %s target entities in %v (pre-hierarchy)",
+		len(configsSource), p.Sprintf("%d", entitiesSourceCount), p.Sprintf("%d", entitiesTargetCount), time.Since(startTime))
+
+	// get ALL entities types
+	stats, err = matchEntities.MatchEntitiesHierarchy(fs, matchParameters, configsSource, configsTarget, stats)
+	if err != nil {
+		return err
+	}
+	printSortedStatsWithHeader(stats)
+
 	log.Info("Finished matching %d entity types, %s source entities and %s target entities in %v",
 		len(configsSource), p.Sprintf("%d", entitiesSourceCount), p.Sprintf("%d", entitiesTargetCount), time.Since(startTime))
 
@@ -116,6 +127,21 @@ func runAndPrintMatchConfigs(fs afero.Fs, matchParameters match.MatchParameters,
 		len(configsSource), p.Sprintf("%d", configsSourceCount), p.Sprintf("%d", configsTargetCount), time.Since(startTime))
 
 	return nil
+}
+
+func printSortedStatsWithHeader(stats map[string]string) {
+	log.Info(STATS_HEADER)
+
+	var keys []string
+	for key := range stats {
+		keys = append(keys, key)
+	}
+
+	sort.Strings(keys)
+
+	for _, key := range keys {
+		log.Info(stats[key])
+	}
 }
 
 func loadProjects(fs afero.Fs, matchParameters match.MatchParameters) (project.ConfigsPerType, project.ConfigsPerType, error) {

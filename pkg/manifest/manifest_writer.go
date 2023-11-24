@@ -15,9 +15,10 @@
 package manifest
 
 import (
-	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/version"
 	"path/filepath"
 	"strings"
+
+	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/version"
 
 	"github.com/spf13/afero"
 	"gopkg.in/yaml.v2"
@@ -113,10 +114,10 @@ func extractGroupedProjectDetails(projectDefinition ProjectDefinition) (groupNam
 }
 
 func toWriteableEnvironmentGroups(environments map[string]EnvironmentDefinition) (result []group) {
-	environmentPerGroup := make(map[string][]environment)
+	environmentPerGroup := make(map[string][]Environment)
 
 	for name, env := range environments {
-		e := environment{
+		e := Environment{
 			Name: name,
 			URL:  toWriteableURL(env),
 			Auth: getAuth(env),

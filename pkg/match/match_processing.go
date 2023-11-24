@@ -102,7 +102,7 @@ func (e *MatchProcessing) GetType() string {
 	return ""
 }
 
-func (e *MatchProcessing) adjustremainingMatch(uniqueMatch *[]CompareResult) {
+func (e *MatchProcessing) AdjustremainingMatch(uniqueMatch *[]CompareResult) {
 
 	sort.Sort(ByLeft(*uniqueMatch))
 	e.Source.reduceRemainingMatchList(uniqueMatch, getLeftId)
@@ -111,7 +111,7 @@ func (e *MatchProcessing) adjustremainingMatch(uniqueMatch *[]CompareResult) {
 
 }
 
-func (e *MatchProcessing) PrepareRemainingMatch(keepSeeded bool, keepUnseeded bool, resultListPtr *IndexCompareResultList) {
+func (e *MatchProcessing) PrepareRemainingMatch(keepSeeded bool, keepUnseeded bool, resultListPtr *CompareResultList) {
 
 	if keepSeeded && keepUnseeded {
 		e.Source.CurrentRemainingMatch = &(e.Source.RemainingMatch)
