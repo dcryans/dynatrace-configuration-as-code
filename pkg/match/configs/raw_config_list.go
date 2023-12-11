@@ -194,6 +194,13 @@ func enhanceConfigs(rawConfigsList *RawConfigsList, configType config.Type, enti
 			} else if classicNameValue != nil {
 				(*rawConfigsList.Values)[confIdx].(map[string]interface{})[rules.ConfigNameKey] = classicNameValue
 			}
+
+			if (*rawConfigsList.Values)[confIdx].(map[string]interface{})[rules.ConfigNameKey] == nil ||
+				(*rawConfigsList.Values)[confIdx].(map[string]interface{})[rules.ConfigNameKey].(string) == "" {
+
+				(*rawConfigsList.Values)[confIdx].(map[string]interface{})[rules.ConfigNameKey] = confMap[configIdLocation].(string)
+			}
+
 			if settingsToV1IDOk {
 				(*rawConfigsList.Values)[confIdx].(map[string]interface{})[rules.Settings20V1Id] = settingsToV1ID
 			}
@@ -256,12 +263,12 @@ func genConfigProcessing(fs afero.Fs, matchParameters match.MatchParameters, con
 		targetType = configObjectListTarget[0].Type
 
 		configTypeInfoTarget := configTypeInfo{configsType, configObjectListTarget[0].Type}
-		writeTarFile(fs, matchParameters.OutputDir, true, configTypeInfoTarget, rawConfigsTarget.Values, nil)
 
 		rawConfigsTarget, err = enhanceConfigs(rawConfigsTarget, targetType, nil)
 		if err != nil {
 			return nil, err
 		}
+		writeTarFile(fs, matchParameters.OutputDir, true, configTypeInfoTarget, rawConfigsTarget.Values, nil)
 	}
 
 	log.Debug("Enhanced %s in %v", configsType, time.Since(startTime))
