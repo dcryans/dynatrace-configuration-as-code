@@ -28,7 +28,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dynatrace/dynatrace-configuration-as-code/internal/idutils"
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/log"
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/throttle"
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/version"
@@ -55,32 +54,6 @@ type ConfigClient interface {
 	//    GET <environment-url>/api/config/v1/alertingProfiles/<id> ... to get the alerting profile
 	ReadConfigById(a api.API, id string) (json []byte, err error)
 	ReadConfigByIdSubId(a api.API, id string, subId string) (json []byte, err error)
-
-	// UpsertConfigByName creates a given Dynatrace config if it doesn't exist and updates it otherwise using its name.
-	// It calls the underlying GET, POST, and PUT endpoints for the API. E.g. for alerting profiles this would be:
-	//    GET <environment-url>/api/config/v1/alertingProfiles ... to check if the config is already available
-	//    POST <environment-url>/api/config/v1/alertingProfiles ... afterwards, if the config is not yet available
-	//    PUT <environment-url>/api/config/v1/alertingProfiles/<id> ... instead of POST, if the config is already available
-	UpsertConfigByName(a api.API, name string, payload []byte) (entity DynatraceEntity, err error)
-
-	// UpsertConfigByNonUniqueNameAndId creates a given Dynatrace config if it doesn't exist and updates it based on specific rules if it does not
-	// - if only one config with the name exist, behave like any other type and just update this entity
-	// - if an exact match is found (same name and same generated UUID) update that entity
-	// - if several configs exist, but non match the generated UUID create a new entity with generated UUID
-	// It calls the underlying GET and PUT endpoints for the API. E.g. for alerting profiles this would be:
-	//	 GET <environment-url>/api/config/v1/alertingProfiles ... to check if the config is already available
-	//	 PUT <environment-url>/api/config/v1/alertingProfiles/<id> ... with the given (or found by unique name) entity ID
-	UpsertConfigByNonUniqueNameAndId(a api.API, entityID string, name string, payload []byte) (entity DynatraceEntity, err error)
-
-	// DeleteConfigById removes a given config for a given API using its id.
-	// It calls the DELETE endpoint for the API. E.g. for alerting profiles this would be:
-	//    DELETE <environment-url>/api/config/v1/alertingProfiles/<id> ... to delete the config
-	DeleteConfigById(a api.API, id string) error
-
-	// ConfigExistsByName checks if a config with the given name exists for the given API.
-	// It calls the underlying GET endpoint for the API. E.g. for alerting profiles this would be:
-	//    GET <environment-url>/api/config/v1/alertingProfiles
-	ConfigExistsByName(a api.API, name string) (exists bool, id string, err error)
 }
 
 // DownloadSettingsObject is the response type for the ListSettings operation
@@ -112,25 +85,12 @@ var ErrSettingNotFound = errors.New("settings object not found")
 //
 // [settings api]: https://www.dynatrace.com/support/help/dynatrace-api/environment-api/settings
 type SettingsClient interface {
-	// UpsertSettings either creates the supplied object, or updates an existing one.
-	// First, we try to find the external-id of the object. If we can't find it, we create the object, if we find it, we
-	// update the object.
-	UpsertSettings(SettingsObject) (DynatraceEntity, error)
 
 	// ListSchemas returns all schemas that the Dynatrace environment reports
 	ListSchemas() (SchemaList, error)
 
-	// ListSettings returns all settings objects for a given schema.
-	ListSettings(string, ListSettingsOptions) ([]DownloadSettingsObject, error)
-
 	// ListSettings returns all settings objects for a given schema in a flat unformatted file.
 	ListSettingsFlat(string, ListSettingsOptions) ([]string, error)
-
-	// GetSettingById returns the setting with the given object ID
-	GetSettingById(string) (*DownloadSettingsObject, error)
-
-	// DeleteSettings deletes a settings object giving its object ID
-	DeleteSettings(string) error
 }
 
 // defaultListSettingsFields  are the fields we are interested in when getting setting objects
@@ -432,60 +392,6 @@ func isNewDynatraceTokenFormat(token string) bool {
 	return strings.HasPrefix(token, "dt0c01.") && strings.Count(token, ".") == 2
 }
 
-func (d *DynatraceClient) UpsertSettings(obj SettingsObject) (DynatraceEntity, error) {
-
-	// special handling for updating settings 2.0 objects on tenants with version pre 1.262.0
-	// Tenants with versions < 1.262 are not able to handle updates of existing
-	// settings 2.0 objects that are non-deletable.
-	// So we check if the object with originObjectID already exists, if yes and the tenant is older than 1.262
-	// then we cannot perform the upsert operation
-	if !d.serverVersion.Invalid() && d.serverVersion.SmallerThan(version.Version{Major: 1, Minor: 262, Patch: 0}) {
-		fetchedSettingObj, err := d.GetSettingById(obj.OriginObjectId)
-		if err != nil && !errors.Is(err, ErrSettingNotFound) {
-			return DynatraceEntity{}, fmt.Errorf("unable to fetch settings object with object id %q: %w", obj.OriginObjectId, err)
-		}
-		if fetchedSettingObj != nil {
-			log.Warn("Unable to update Settings 2.0 object of schema %q and object id %q on Dynatrace environment with a version < 1.262.0", obj.SchemaId, obj.OriginObjectId)
-			return DynatraceEntity{
-				Id:   fetchedSettingObj.ObjectId,
-				Name: fetchedSettingObj.ObjectId,
-			}, nil
-		}
-	}
-
-	externalId := idutils.GenerateExternalID(obj.SchemaId, obj.Id)
-	// special handling of this Settings object.
-	// It is delete-protected BUT has a key property which is internally
-	// used to find the object to be updated
-	if obj.SchemaId == "builtin:oneagent.features" {
-		externalId = ""
-		obj.OriginObjectId = ""
-	}
-	payload, err := buildPostRequestPayload(obj, externalId)
-	if err != nil {
-		return DynatraceEntity{}, fmt.Errorf("failed to build settings object for upsert: %w", err)
-	}
-
-	requestUrl := d.environmentURL + d.settingsObjectAPIPath
-
-	resp, err := rest.SendWithRetryWithInitialTry(d.client, rest.Post, obj.Id, requestUrl, payload, d.retrySettings.Normal)
-	if err != nil {
-		return DynatraceEntity{}, fmt.Errorf("failed to upsert dynatrace obj: %w", err)
-	}
-
-	if !success(resp) {
-		return DynatraceEntity{}, fmt.Errorf("failed to upsert settings object with externalId %s (HTTP %d)!\n\tResponse was: %s", externalId, resp.StatusCode, string(resp.Body))
-	}
-
-	entity, err := parsePostResponse(resp)
-	if err != nil {
-		return DynatraceEntity{}, fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	log.Debug("\tCreated/Updated object %s (%s) with externalId %s", obj.Id, obj.SchemaId, externalId)
-	return entity, nil
-}
-
 func (d *DynatraceClient) ListConfigs(api api.API) (values []Value, err error) {
 
 	fullUrl := api.CreateURL(d.environmentURLClassic)
@@ -529,30 +435,6 @@ func (d *DynatraceClient) ReadConfigByIdSubId(api api.API, id string, subId stri
 	return response.Body, nil
 }
 
-func (d *DynatraceClient) DeleteConfigById(api api.API, id string) error {
-
-	return rest.DeleteConfig(d.clientClassic, api.CreateURL(d.environmentURLClassic), id)
-}
-
-func (d *DynatraceClient) ConfigExistsByName(api api.API, name string) (exists bool, id string, err error) {
-	apiURL := api.CreateURL(d.environmentURLClassic)
-	existingObjectId, err := getObjectIdIfAlreadyExists(d.clientClassic, api, apiURL, name, d.retrySettings)
-	return existingObjectId != "", existingObjectId, err
-}
-
-func (d *DynatraceClient) UpsertConfigByName(api api.API, name string, payload []byte) (entity DynatraceEntity, err error) {
-
-	if api.ID == "extension" {
-		fullUrl := api.CreateURL(d.environmentURLClassic)
-		return uploadExtension(d.clientClassic, fullUrl, name, payload)
-	}
-	return upsertDynatraceObject(d.clientClassic, d.environmentURLClassic, name, api, payload, d.retrySettings)
-}
-
-func (d *DynatraceClient) UpsertConfigByNonUniqueNameAndId(api api.API, entityId string, name string, payload []byte) (entity DynatraceEntity, err error) {
-	return upsertDynatraceEntityByNonUniqueNameAndId(d.clientClassic, d.environmentURLClassic, entityId, name, api, payload, d.retrySettings)
-}
-
 // SchemaListResponse is the response type returned by the ListSchemas operation
 type SchemaListResponse struct {
 	Items      SchemaList `json:"items"`
@@ -589,71 +471,6 @@ func (d *DynatraceClient) ListSchemas() (SchemaList, error) {
 	}
 
 	return result.Items, nil
-}
-
-func (d *DynatraceClient) GetSettingById(objectId string) (*DownloadSettingsObject, error) {
-	u, err := url.Parse(d.environmentURL + d.settingsObjectAPIPath + "/" + objectId)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse URL '%s': %w", d.environmentURL+d.settingsObjectAPIPath, err)
-	}
-
-	resp, err := rest.Get(d.client, u.String())
-	if err != nil {
-		return nil, fmt.Errorf("failed to GET settings object with object id %q: %w", objectId, err)
-	}
-
-	if !success(resp) {
-		// special case of settings API: If you give it any object ID for a setting object that does not exist, it will give back 400 BadRequest instead
-		// of 404 Not found. So we interpret both status codes, 400 and 404, as "not found"
-		if resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusNotFound {
-			return nil, ErrSettingNotFound
-		}
-		return nil, fmt.Errorf("request failed with HTTP (%d).\n\tResponse content: %s", resp.StatusCode, string(resp.Body))
-	}
-
-	var result DownloadSettingsObject
-	if err = json.Unmarshal(resp.Body, &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
-	}
-
-	return &result, nil
-}
-
-func (d *DynatraceClient) ListSettings(schemaId string, opts ListSettingsOptions) ([]DownloadSettingsObject, error) {
-	log.Debug("Downloading all settings for schema %s", schemaId)
-
-	resultSettings := make([]DownloadSettingsObject, 0)
-
-	addToResultSettings := func(body []byte) (int, int, error) {
-		var parsed struct {
-			Items []DownloadSettingsObject `json:"items"`
-		}
-		if err := json.Unmarshal(body, &parsed); err != nil {
-			return 0, len(resultSettings), fmt.Errorf("failed to unmarshal response: %w", err)
-		}
-
-		// eventually apply filter
-		if opts.Filter == nil {
-			resultSettings = append(resultSettings, parsed.Items...)
-		} else {
-			for _, i := range parsed.Items {
-				if opts.Filter(i) {
-					resultSettings = append(resultSettings, i)
-				}
-			}
-		}
-
-		return len(parsed.Items), len(resultSettings), nil
-	}
-
-	params := genSettingsParams(opts, schemaId)
-	_, err := d.listPaginated(d.settingsObjectAPIPath, params, schemaId, addToResultSettings)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return resultSettings, nil
 }
 
 func (d *DynatraceClient) ListSettingsFlat(schemaId string, opts ListSettingsOptions) ([]string, error) {
@@ -891,16 +708,6 @@ func (d *DynatraceClient) listPaginated(urlPath string, params url.Values, logLa
 	}
 
 	return resp, nil
-
-}
-
-func (d *DynatraceClient) DeleteSettings(objectID string) error {
-	u, err := url.Parse(d.environmentURL + d.settingsObjectAPIPath)
-	if err != nil {
-		return fmt.Errorf("failed to parse URL '%s': %w", d.environmentURL+d.settingsObjectAPIPath, err)
-	}
-
-	return rest.DeleteConfig(d.client, u.String(), objectID)
 
 }
 

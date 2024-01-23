@@ -16,7 +16,7 @@
 
 package version
 
-var MonitoringAsCode = "2.x"
+var MonitoringAsCode = "oneTopology"
 
 const ManifestVersion = "1.0"
 const MinManifestVersion = "1.0"

@@ -15,12 +15,8 @@
 package runner
 
 import (
-	"github.com/dynatrace/dynatrace-configuration-as-code/cmd/monaco/convert"
-	"github.com/dynatrace/dynatrace-configuration-as-code/cmd/monaco/delete"
-	"github.com/dynatrace/dynatrace-configuration-as-code/cmd/monaco/deploy"
 	"github.com/dynatrace/dynatrace-configuration-as-code/cmd/monaco/download"
 	"github.com/dynatrace/dynatrace-configuration-as-code/cmd/monaco/match"
-	"github.com/dynatrace/dynatrace-configuration-as-code/cmd/monaco/purge"
 	"github.com/dynatrace/dynatrace-configuration-as-code/cmd/monaco/version"
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/featureflags"
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/log"
@@ -75,20 +71,10 @@ Examples:
 
 	// commands
 	rootCmd.AddCommand(download.GetDownloadCommand(fs, &download.DefaultCommand{}))
-	rootCmd.AddCommand(convert.GetConvertCommand(fs))
-	rootCmd.AddCommand(deploy.GetDeployCommand(fs))
-	rootCmd.AddCommand(delete.GetDeleteCommand(fs))
 	rootCmd.AddCommand(version.GetVersionCommand())
 
 	if featureflags.Entities().Enabled() {
 		rootCmd.AddCommand(match.GetMatchCommand(fs, &match.DefaultCommand{}))
-	}
-
-	if featureflags.DangerousCommands().Enabled() {
-		log.Warn("MONACO_ENABLE_DANGEROUS_COMMANDS environment var detected!")
-		log.Warn("Use additional commands with care, they might have heavy impact on configurations or environments")
-
-		rootCmd.AddCommand(purge.GetPurgeCommand(fs))
 	}
 
 	return rootCmd

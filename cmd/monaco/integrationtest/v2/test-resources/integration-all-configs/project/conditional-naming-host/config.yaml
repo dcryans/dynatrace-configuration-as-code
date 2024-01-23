@@ -1,9 +1,0 @@
-configs:
-- id: host-naming
-  config:
-    name: 'MaC Test: Host Naming Rule'
-    template: host-naming.json
-    skip: false
-  type:
-    api: conditional-naming-host
-

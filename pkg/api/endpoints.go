@@ -21,7 +21,6 @@ var MobileRemoteProperties = API{
 	URLPath:                      "/api/config/v1/applications/mobile",
 	URLSuffix:                    "userActionAndSessionProperties",
 	PropertyNameOfGetAllResponse: StandardApiPropertyNameOfGetAllResponse,
-	SkipDownload:                 true,
 }
 
 // configEndpoints is map of the http endpoints for configuration API (aka classic/config endpoints).
@@ -32,6 +31,16 @@ var configEndpoints = []API{
 		PropertyNameOfGetAllResponse: StandardApiPropertyNameOfGetAllResponse,
 		DeprecatedBy:                 "builtin:alerting.profile",
 		NonUniqueName:                true,
+	},
+	{
+		ID:                           "network-zone",
+		URLPath:                      "/api/v2/networkZones",
+		PropertyNameOfGetAllResponse: "networkZones",
+	},
+	{
+		ID:                           "credentials-vault",
+		URLPath:                      "/api/v2/credentials",
+		PropertyNameOfGetAllResponse: "credentials",
 	},
 	{
 		ID:                           "management-zone",
@@ -68,7 +77,6 @@ var configEndpoints = []API{
 		ID:                           "extension",
 		URLPath:                      "/api/config/v1/extensions",
 		PropertyNameOfGetAllResponse: "extensions",
-		SkipDownload:                 true,
 	},
 	{
 		ID:                  "extension-elasticsearch",
@@ -170,7 +178,6 @@ var configEndpoints = []API{
 		ID:                           "aws-credentials",
 		URLPath:                      "/api/config/v1/aws/credentials",
 		PropertyNameOfGetAllResponse: StandardApiPropertyNameOfGetAllResponse,
-		SkipDownload:                 true,
 	},
 	// Early adopter API !
 	{
@@ -179,13 +186,11 @@ var configEndpoints = []API{
 		PropertyNameOfGetAllResponse: StandardApiPropertyNameOfGetAllResponse,
 		DeprecatedBy:                 "builtin:cloud.kubernetes",
 		//NonUniqueName: true, // non-unique name handling for k8s credentials does not work, as path ID needs to be a ME-ID not a uuid; handling as unique again for now
-		SkipDownload: true,
 	},
 	{
 		ID:                           "azure-credentials",
 		URLPath:                      "/api/config/v1/azure/credentials",
 		PropertyNameOfGetAllResponse: StandardApiPropertyNameOfGetAllResponse,
-		SkipDownload:                 true,
 	},
 	{
 		ID:                           "request-attributes",

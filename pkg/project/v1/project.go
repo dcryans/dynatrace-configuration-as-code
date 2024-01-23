@@ -18,13 +18,14 @@ package v1
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/errutils"
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/files"
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/log"
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/template"
-	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/api"
 	"github.com/spf13/afero"
@@ -70,9 +71,6 @@ func newProject(fs afero.Fs, fullQualifiedProjectFolderName string, projectFolde
 		return nil, err
 	}
 
-	if err := builder.sortConfigsAccordingToDependencies(); err != nil {
-		return nil, err
-	}
 	builder.resolveDuplicateIDs()
 
 	warnIfProjectNameClashesWithApiName(projectFolderName, apis, sanitizedProjectRootFolder)
@@ -224,15 +222,6 @@ func (p *projectBuilder) getConfigTypeFromLocation(location string) (error, api.
 	}
 
 	return fmt.Errorf("API was unknown. Not found in %s", location), api.API{}
-}
-
-func (p *projectBuilder) sortConfigsAccordingToDependencies() error {
-
-	configs, err := sortConfigurations(p.configs)
-	if err == nil {
-		p.configs = configs
-	}
-	return err
 }
 
 func (p *projectBuilder) resolveDuplicateIDs() {

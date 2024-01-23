@@ -248,13 +248,6 @@ func (c *DummyClient) ConfigExistsByName(a api.API, name string) (exists bool, i
 	return false, "", nil
 }
 
-func (c *DummyClient) UpsertSettings(obj SettingsObject) (DynatraceEntity, error) {
-	return DynatraceEntity{
-		Id:   obj.Id,
-		Name: obj.Id,
-	}, nil
-}
-
 func (c *DummyClient) ListSchemas() (SchemaList, error) {
 	return make(SchemaList, 0), nil
 }

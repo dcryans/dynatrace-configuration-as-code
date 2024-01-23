@@ -1,8 +1,0 @@
-configs:
-- id: content-resources
-  config:
-    name: content-resources
-    template: content-resources.json
-    skip: false
-  type:
-    api: content-resources

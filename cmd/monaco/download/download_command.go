@@ -20,7 +20,6 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/dynatrace/dynatrace-configuration-as-code/internal/featureflags"
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/log"
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/version"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/client"
@@ -50,10 +49,7 @@ To download entities, use download entities`,
 	}
 
 	getDownloadConfigsCommand(fs, command, downloadCmd)
-
-	if featureflags.Entities().Enabled() {
-		getDownloadEntitiesCommand(fs, command, downloadCmd)
-	}
+	getDownloadEntitiesCommand(fs, command, downloadCmd)
 
 	return downloadCmd
 }

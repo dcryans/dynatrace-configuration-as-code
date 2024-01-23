@@ -1,8 +1,0 @@
-configs:
-- id: service-naming
-  config:
-    name: Prepend Namespace
-    template: service-naming.json
-    skip: false
-  type:
-    api: conditional-naming-service

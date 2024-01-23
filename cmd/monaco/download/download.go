@@ -16,15 +16,15 @@ package download
 
 import (
 	"fmt"
-	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/manifest"
 	"net/url"
 	"path"
+
+	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/manifest"
 
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/errutils"
 	"github.com/dynatrace/dynatrace-configuration-as-code/internal/log"
 	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/download"
 	project "github.com/dynatrace/dynatrace-configuration-as-code/pkg/project/v2"
-	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/project/v2/topologysort"
 	"github.com/spf13/afero"
 )
 
@@ -80,23 +80,7 @@ func writeConfigs(downloadedConfigs project.ConfigsPerType, opts downloadOptions
 		return err
 	}
 
-	log.Info("Searching for circular dependencies")
-	if depErr := reportForCircularDependencies(proj); depErr != nil {
-		log.Warn("Download finished with problems: %s", depErr)
-	} else {
-		log.Info("No circular dependencies found")
-	}
-
 	log.Info("Finished download")
-	return nil
-}
-
-func reportForCircularDependencies(p project.Project) error {
-	_, errs := topologysort.GetSortedConfigsForEnvironments([]project.Project{p}, []string{p.Id})
-	if len(errs) != 0 {
-		errutils.PrintWarnings(errs)
-		return fmt.Errorf("there are circular dependencies between %d configurations that need to be resolved manually", len(errs))
-	}
 	return nil
 }
 

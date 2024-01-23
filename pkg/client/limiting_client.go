@@ -57,65 +57,9 @@ func (l limitingClient) ReadConfigByIdSubId(a api.API, id string, subId string) 
 	return
 }
 
-func (l limitingClient) UpsertConfigByName(a api.API, name string, payload []byte) (entity DynatraceEntity, err error) {
-	l.limiter.ExecuteBlocking(func() {
-		entity, err = l.client.UpsertConfigByName(a, name, payload)
-	})
-
-	return
-}
-
-func (l limitingClient) UpsertConfigByNonUniqueNameAndId(a api.API, entityId string, name string, payload []byte) (entity DynatraceEntity, err error) {
-	l.limiter.ExecuteBlocking(func() {
-		entity, err = l.client.UpsertConfigByNonUniqueNameAndId(a, entityId, name, payload)
-	})
-
-	return
-}
-
-func (l limitingClient) DeleteConfigById(a api.API, id string) (err error) {
-	l.limiter.ExecuteBlocking(func() {
-		err = l.client.DeleteConfigById(a, id)
-	})
-
-	return
-}
-
-func (l limitingClient) ConfigExistsByName(a api.API, name string) (exists bool, id string, err error) {
-	l.limiter.ExecuteBlocking(func() {
-		exists, id, err = l.client.ConfigExistsByName(a, name)
-	})
-
-	return
-}
-
-func (l limitingClient) UpsertSettings(obj SettingsObject) (e DynatraceEntity, err error) {
-	l.limiter.ExecuteBlocking(func() {
-		e, err = l.client.UpsertSettings(obj)
-	})
-
-	return
-}
-
 func (l limitingClient) ListSchemas() (s SchemaList, err error) {
 	l.limiter.ExecuteBlocking(func() {
 		s, err = l.client.ListSchemas()
-	})
-
-	return
-}
-
-func (l limitingClient) GetSettingById(objectId string) (o *DownloadSettingsObject, err error) {
-	l.limiter.ExecuteBlocking(func() {
-		o, err = l.client.GetSettingById(objectId)
-	})
-
-	return
-}
-
-func (l limitingClient) ListSettings(schemaId string, opts ListSettingsOptions) (o []DownloadSettingsObject, err error) {
-	l.limiter.ExecuteBlocking(func() {
-		o, err = l.client.ListSettings(schemaId, opts)
 	})
 
 	return
@@ -128,15 +72,6 @@ func (l limitingClient) ListSettingsFlat(schemaId string, opts ListSettingsOptio
 
 	return
 }
-
-func (l limitingClient) DeleteSettings(objectID string) (err error) {
-	l.limiter.ExecuteBlocking(func() {
-		err = l.client.DeleteSettings(objectID)
-	})
-
-	return
-}
-
 func (l limitingClient) ListEntitiesTypes() (e []EntitiesType, err error) {
 	l.limiter.ExecuteBlocking(func() {
 		e, err = l.client.ListEntitiesTypes()

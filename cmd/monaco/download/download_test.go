@@ -17,15 +17,9 @@
 package download
 
 import (
-	config "github.com/dynatrace/dynatrace-configuration-as-code/pkg/config/v2"
-	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/config/v2/coordinate"
-	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/config/v2/parameter"
-	valueParam "github.com/dynatrace/dynatrace-configuration-as-code/pkg/config/v2/parameter/value"
-	"github.com/dynatrace/dynatrace-configuration-as-code/pkg/config/v2/template"
-	project "github.com/dynatrace/dynatrace-configuration-as-code/pkg/project/v2"
-	"github.com/spf13/afero"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/spf13/afero"
 )
 
 func Test_validateOutputFolder(t *testing.T) {
@@ -112,71 +106,4 @@ func getTestFs(existingFolderPaths []string, existingFilePaths []string) afero.F
 		_ = afero.WriteFile(fs, p, []byte{}, 0777)
 	}
 	return fs
-}
-
-func Test_checkForCircularDependencies(t *testing.T) {
-	type args struct {
-		proj project.Project
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
-		{
-			"writes nothing if no configs are downloaded",
-			args{
-				project.Project{},
-			},
-			false,
-		}, {
-			"return errors if cyclic dependency in downloaded configs",
-			args{
-				project.Project{
-					Id: "test_project",
-					Configs: map[string]project.ConfigsPerType{
-						"test_project": {
-							"dashboard": []config.Config{
-								{
-									Template: template.CreateTemplateFromString("some/path", "{}"),
-									Parameters: map[string]parameter.Parameter{
-										"name": &valueParam.ValueParameter{Value: "name A"},
-										"ref":  parameter.NewDummy(coordinate.Coordinate{Project: "test", Type: "dashboard", ConfigId: "b"}),
-									},
-									Coordinate: coordinate.Coordinate{
-										Project:  "test",
-										Type:     "dashboard",
-										ConfigId: "a",
-									},
-								},
-								{
-									Template: template.CreateTemplateFromString("some/path", "{}"),
-									Parameters: map[string]parameter.Parameter{
-										"name": &valueParam.ValueParameter{Value: "name A"},
-										"ref":  parameter.NewDummy(coordinate.Coordinate{Project: "test", Type: "dashboard", ConfigId: "a"}),
-									},
-									Coordinate: coordinate.Coordinate{
-										Project:  "test",
-										Type:     "dashboard",
-										ConfigId: "b",
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := reportForCircularDependencies(tt.args.proj)
-			if tt.wantErr {
-				assert.ErrorContains(t, err, "there are circular dependencies")
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
 }

@@ -17,7 +17,6 @@
 package settings
 
 import (
-	"encoding/json"
 	"errors"
 	"sync"
 
@@ -115,8 +114,6 @@ func (d *Downloader) download(schemas []string, projectName string, flatDump boo
 
 			if flatDump {
 				configs = d.downloadFlat(s, projectName)
-			} else {
-				configs = d.downloadFormatted(s, projectName)
 			}
 
 			if configs == nil {
@@ -133,25 +130,6 @@ func (d *Downloader) download(schemas []string, projectName string, flatDump boo
 	wg.Wait()
 
 	return results
-}
-
-func (d *Downloader) downloadFormatted(schema string, projectName string) []config.Config {
-	objects, err := d.client.ListSettings(schema, client.ListSettingsOptions{})
-
-	if err != nil {
-		printDownloadError(err, schema)
-		return nil
-	}
-
-	if len(objects) == 0 {
-		return nil
-	}
-
-	log.Info("Downloaded %d settings for schema %s", len(objects), schema)
-
-	configs := d.convertAllObjects(objects, projectName)
-
-	return configs
 }
 
 func (d *Downloader) downloadFlat(schema string, projectName string) []config.Config {
@@ -184,58 +162,6 @@ func printDownloadError(err error, schema string) {
 	}
 
 	log.Error("Failed to fetch all settings for schema %s: %v", schema, errMsg)
-}
-
-//func (d *Downloader) downloadFormatted()
-
-func (d *Downloader) convertAllObjects(objects []client.DownloadSettingsObject, projectName string) []config.Config {
-	result := make([]config.Config, 0, len(objects))
-	for _, o := range objects {
-
-		// try to unmarshall settings value
-		var contentUnmarshalled map[string]interface{}
-		if err := json.Unmarshal(o.Value, &contentUnmarshalled); err != nil {
-			log.Error("Unable to unmarshal JSON value of settings 2.0 object: %v", err)
-			return result
-		}
-		// skip discarded settings objects
-		if shouldDiscard, reason := d.filters.Get(o.SchemaId).ShouldDiscard(contentUnmarshalled); shouldDiscard {
-			log.Warn("Downloaded setting of schema %q will be discarded. Reason: %s", o.SchemaId, reason)
-			continue
-		}
-
-		// indent value payload
-		var content string
-		if bytes, err := json.MarshalIndent(o.Value, "", "  "); err == nil {
-			content = string(bytes)
-		} else {
-			log.Warn("Failed to indent settings template. Reason: %s", err)
-			content = string(o.Value)
-		}
-
-		// construct config object with generated config ID
-		configId := idutils.GenerateUuidFromName(o.ObjectId)
-		c := config.Config{
-			Template: template.NewDownloadTemplate(configId, configId, content),
-			Coordinate: coordinate.Coordinate{
-				Project:  projectName,
-				Type:     o.SchemaId,
-				ConfigId: configId,
-			},
-			Type: config.SettingsType{
-				SchemaId:      o.SchemaId,
-				SchemaVersion: o.SchemaVersion,
-			},
-			Parameters: map[string]parameter.Parameter{
-				config.NameParameter:  &value.ValueParameter{Value: configId},
-				config.ScopeParameter: &value.ValueParameter{Value: o.Scope},
-			},
-			Skip:           false,
-			OriginObjectId: o.ObjectId,
-		}
-		result = append(result, c)
-	}
-	return result
 }
 
 func (d *Downloader) convertAllObjectsFlat(objects []string, schemaId string, projectName string) []config.Config {

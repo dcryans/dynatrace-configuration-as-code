@@ -1,8 +1,0 @@
-configs:
-- id: mobile-application
-  config:
-    name: BORG Mobile Application
-    template: mobile-application.json
-    skip: false
-  type:
-    api: application-mobile
