@@ -116,6 +116,9 @@ func enhanceConfigs(rawConfigsList *RawConfigsList, configType config.Type, enti
 					mutex.Unlock()
 					return
 				}
+				if confInterfaceModified != nil {
+					confMap = confInterfaceModified.(map[string]interface{})
+				}
 			}
 
 			uniqueConfKey := ""

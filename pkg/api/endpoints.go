@@ -21,6 +21,7 @@ var MobileRemoteProperties = API{
 	URLPath:                      "/api/config/v1/applications/mobile",
 	URLSuffix:                    "userActionAndSessionProperties",
 	PropertyNameOfGetAllResponse: StandardApiPropertyNameOfGetAllResponse,
+	SkipDownload:                 true,
 }
 
 // configEndpoints is map of the http endpoints for configuration API (aka classic/config endpoints).
